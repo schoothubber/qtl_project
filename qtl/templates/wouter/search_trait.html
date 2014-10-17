@@ -1,0 +1,21 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+	
+  	<form action="." method="get"> 
+		Enter trait : <input id="trait_id" name ="trait_name" type="text"/>
+		<br><br>
+		Enter cutoff : <input id ="cutoff" name ="cutoff_name" type="float"/>
+		<br><br>
+		Check for environmental permutation <br>
+		Uncheck for normal gene expression
+		<input  id="set_gxe" name ="gxe" type="checkbox">
+		<br><br>
+		<input type="submit" id="search_submit" value="Search" />
+		<br><br>
+	</form>
+	
+
+
+{% endblock %}

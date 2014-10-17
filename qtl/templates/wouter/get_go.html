@@ -1,0 +1,61 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+
+{% if n_qtl %}
+
+		There are {{ n_qtl }} qtl's.<br>
+		
+{% endif %}
+
+
+{% for key, value in l8.items %}
+
+	<p>{{key}}</p>
+
+{% endfor %}
+
+
+{% if n_genes %}
+
+		Containing a total of {{ n_genes }} genes.<br><br>
+
+{% endif %}
+
+		
+{% if n_GO %}
+
+		There are {{ n_GO }} annotations <br><br>
+
+{% endif %}
+
+
+<!--{% if l10 %}
+
+		{{ l10 }}
+
+{% endif %} -->
+
+{% if yesno_list %}
+		
+		{% for yesno in yesno_list %}
+
+			<li>{{ yesno }}</li>
+			
+		{% endfor %}
+
+{% endif %}
+
+<br><br><br>
+
+{% if check %}
+
+	{{ check }}
+
+{% endif %}
+	
+
+
+
+{% endblock %}
