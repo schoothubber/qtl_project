@@ -1,3 +1,7 @@
 from django.test import TestCase
 
-# Create your tests here.
+############################################################################################################
+#Jacob Kaplan-Moss, one of Django’s original developers, says “Code without tests is broken by design.”
+############################################################################################################
+
+

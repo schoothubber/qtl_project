@@ -1,21 +1,22 @@
 import string
 import os
 import time
+import rpy2.robjects as robjects
 
-from django.shortcuts import render,get_object_or_404,render_to_response
+from django.shortcuts import render_to_response
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpRequest as request
 from django.template import RequestContext
-from django.core.context_processors import csrf
 
 from .models import Experiment,Gene,Marker,LOD,Parent,RIL,Metabolite,MParent,MRIL,MLOD
+
 
 ###############################################################################
 #################################WOUTERS#######################################
 ###################################CODE########################################
 ###############################################################################
 
-def marker_logp_list(trait):
+def marker_logp_list(trait, gxe_boolean):
     '''
     Create a list of tuples containing markers with corresponding -log p value.
     Both are subscribed to the requested trait.
@@ -43,7 +44,7 @@ def marker_logp_list(trait):
 		#to return the object directly
 		#gxe differentiates between normal gene expression (False)
         #and environmental permutation (True)
-        logp1 = LOD.objects.get(locus_identifier = trait, marker_name = markers[i], gxe = False)
+        logp1 = LOD.objects.get(locus_identifier = trait, marker_name = markers[i], gxe = gxe_boolean)
         
         #From the returned object extract the value from the attribute LOD_score
         logp2 = logp1.LOD_score
@@ -123,13 +124,15 @@ def retrieve_logp_above_cutoff(tuple_list, cutoff):
 		
 		#Use abs() because there are negative -logp values present
 		#The minus signs were added to indicate down regulation
+		#or does + indicate Bay ?
+		#and does - indicate Sha ?
         if abs(info_tuple[2]) >= cutoff:
 				
             cutoff_list.append(info_tuple)
         else:
             continue
 
-    return cutoff_list #(int, marker, -logp)
+	return cutoff_list #(int, marker, -logp)
 
 
 ###############################################################################
@@ -572,7 +575,6 @@ def read_annotation(filename, gene_list):
 	the first gene list AND in the GO list, plus the corresponding
 	GO annotation
 	
-	The tic-toc was added to ascertain how long a search takes
 	"""
 
 	#read the data from the file containing the following datastructure:
@@ -780,6 +782,44 @@ def check_yesno_totals(yesno_list):
 		check.append([total1, total2])
 	
 	return check
+	
+	
+	
+###############################################################################
+###################################R#SCRIPT####################################
+###############################################################################
+
+def fisher_test(data):
+	r = robjects.r
+	do_R = r.source
+	('''
+				infile=commandArgs(TRUE)[1];
+				ofile=commandArgs(TRUE)[2];
+				
+				dat<-read.table(infile,colClasses=c("character","numeric","numeric","numeric","numeric"))
+				for (i in 1:nrow(dat)) {
+				go<-dat[i,1]
+				a<-c(dat[i,2],dat[i,4],dat[i,3],dat[i,5])
+				print(a)
+				aa<-matrix(a,nrow=2)
+				print(aa)
+				fl<-fisher.test(aa,alternative="l")
+				#print(fl)
+				fu<-fisher.test(aa,alternative="g")
+				#print(fu)
+				write.table(lapply(c(infile,i,go,round(fl$p.value,digits=7),round(fu$p.value,digits=7)),paste,collapse=" "),file=ofile,append=TRUE,row.names=FALSE,quote=FALSE,col.names=FALSE)
+				}
+				q()
+				TeaTasting <-
+				matrix(c(3, 1, 1, 3),
+				nrow = 2,
+				dimnames = list(Guess = c("Milk", "Tea"),
+				Truth = c("Milk", "Tea")))
+				fisher.test(TeaTasting, alternative = "greater")
+			''')
+
+	result = do_R(data)
+	return result
 		
 
 ###############################################################################
@@ -794,112 +834,157 @@ def SearchTraitView(request):
 	are retrieved from the database and fed to this view. 
 	They are subsequently manipulated by other functions
 	The output is sent to a nother template galled genelist.html
+	
+	The tic-toc was added to ascertain how long a search takes
 	"""
-	#if request.GET.get('gxe') == True:
-		#print "gxe = True"
+	
+	#The template will show a checkbox, default will be unchecked
+	#unchecked means 'gxe' is not in request.GET and thus we will go for
+	#normale gene expression
+	#checked means 'gxe' is in request.GET and thus we will go for 
+	#environmental permutation
+	if 'gxe' in request.GET:
+		gxe_boolean = True
+	if 'gxe' not in request.GET:
+		gxe_boolean = False
 		
-	#if request.GET.get('gxe') == False:
-		#print "gxe = False"
-		
+	#The values 'trait_name' and 'cutoff_name' are given in the template
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
 		tic = time.clock()
-		
+	
 		trait_name_u = request.GET.get('trait_name')
-		trait_name = trait_name_u.encode("utf-8")
 		
+		
+		trait_name = trait_name_u.encode("utf-8")
+	
 		cutoff_name_D = request.GET.get('cutoff_name')
 		cutoff_name = float(cutoff_name_D)
 	
-		l1 = marker_logp_list(trait_name)
+		l1 = marker_logp_list(trait_name, gxe_boolean)
 		l2 = add_chromosome_and_position(l1)
 		l3 = retrieve_logp_above_cutoff(l2, cutoff_name)
-		l4 = check_region(l3)
 		
-		#this function uses the function 
-		#highest_tuple
-		l5 = iterate_marker_tuple(l4)
+		#If no markers are found above the chosen cutoff, than display this message
+		if l3 == None:
+			message = "There are no markers with a LOD score higher than %f for trait %s" % (cutoff_name, trait_name)
+			bottle = {"message" : message}
+			return render_to_response("wouter/no_go.html", bottle)
 		
-		#this function uses the functions 
-		#get_chromosome_max and check_regions_on_chromosome
-		l6 = set_region_from_adjacent_markers(l5, l2)
+		else:
 		
-		l7 = combine_marker_region_data(trait_name, l6)
-		
-		#this function uses the function 
-		#normalize_object_data
-		l8 = find_genes_in_regions(l7)
-		
-		l9 = read_distinct_genes(l8)
-		
-		###############################
-		###############AJ##############
-		###############################
-
-		#get the location of the GO annotation file
-		filename = 'pred.out'
-		module_dir = os.path.dirname(__file__)  # get current directory
-		file_path = os.path.join(module_dir, 'documents', filename)
-		
-		data = read_once(file_path)
+			l4 = check_region(l3)
+			
+			#this function uses the function 
+			#highest_tuple
+			l5 = iterate_marker_tuple(l4)
+			
+			#this function uses the functions 
+			#get_chromosome_max and check_regions_on_chromosome
+			l6 = set_region_from_adjacent_markers(l5, l2)
+			
+			l7 = combine_marker_region_data(trait_name, l6)
+			
+			#this function uses the function 
+			#normalize_object_data
+			l8 = find_genes_in_regions(l7)
+			
+			l9 = read_distinct_genes(l8)
+			
+			#Place the output into a dictionary
+			#Give each key the same name as the variable for convenience
+			#The dictionary will be passed to the template
+			#Inside the template the key's are used to display the
+			#corresponding values
+			gene_dict = {
+						"trait_name" : trait_name,
+						"cutoff_name" : cutoff_name,
+						"l2" : l2,
+						"l3" : l3,
+						"l4" : l4,
+						"l5" : l5,
+						"l6" : l6,
+						"l8" : l8,
+						"l9" : l9
+						}
+			
+			
+			###############################
+			###############AJ##############
+			###############################
+	
+	
+			#get the location of the GO annotation file
+			filename = 'pred.out'
+			module_dir = os.path.dirname(__file__)  # get current directory
+			file_path = os.path.join(module_dir, 'documents', filename)
+			
+			data = read_once(file_path)
 				
-		l10 = read_annotation(file_path, l9)
-		
-		seldict, golist = readsel(l10)
-		
-		alldict = readall(file_path, seldict)
-		
-		yesno_list = make_yesno_list(golist, seldict, alldict)
-		
-		check = check_yesno_totals(yesno_list)
-		
-		
-		
-		
-		
-		#Place the output into a dictionary
-		#Give each key the same name as the variable for convenience
-		#The dictionary will be passed to the template
-		#Inside the template the key's are used to display the
-		#corresponding values
-		gene_dict = {
-					"trait_name" : trait_name,
-					"cutoff_name" : cutoff_name,
-					"l2" : l2,
-					"l3" : l3,
-					"l4" : l4,
-					"l5" : l5,
-					"l6" : l6,
-					"l8" : l8,
-					"l9" : l9
-					}
-		
-		n_qtl = len(l8) #number of qtl's 
-		n_genes = len(l9) #total number of genes from all qtl's
-		n_GO = len(l10) #number of GO annotations found from GO list
-		
-		gene_list_dict = {
-					"n_GO" : n_GO,
-					"n_qtl": n_qtl,
-					"n_genes": n_genes,
-					"l10": l10,
-					"l8": l8,
-					"yesno_list": yesno_list,
-					"check": check
-					}
+			l10 = read_annotation(file_path, l9)
+			
+			seldict, golist = readsel(l10)
+			
+			alldict = readall(file_path, seldict)
+			
+			yesno_list = make_yesno_list(golist, seldict, alldict)
+			
+			check = check_yesno_totals(yesno_list)
+			
+			n_qtl = len(l8) #number of qtl's 
+			n_genes = len(l9) #total number of genes from all qtl's
+			n_GO = len(l10) #number of GO annotations found from GO list
+						
+						
+			gene_list_dict = {
+						"n_GO" : n_GO,
+						"n_qtl": n_qtl,
+						"n_genes": n_genes,
+						"l10": l10,
+						"l8": l8,
+						"yesno_list": yesno_list,
+						"check": check
+						}
+						
 
+				
+			###############################
+			######### R # TIME #!!!########
+			###############################
+			
+			
+			fisher = fisher_test(yesno_list)
+			
+			R_dict = {"fisher": fisher}
+	
+			toc = time.clock()
+			print "in %f seconds" % (toc-tic)
+			#return display_meta(request)
+			return render_to_response("wouter/get_go.html", R_dict)
+			#return render_to_response("wouter/get_go.html", gene_list_dict)
+			#return render_to_response("wouter/gene_list.html", gene_dict)
 
-		toc = time.clock()
-		print "in %f seconds" % (toc-tic)
-
-		return render_to_response("wouter/get_go.html", gene_list_dict)
-		#return render_to_response("wouter/gene_list.html", gene_dict)
-
+		
 	else:
 		return render_to_response('wouter/search_trait.html')
-		
 
 
+
+
+###############################################################################
+
+
+
+def display_meta(request):
+	"""
+	Display all the data (keys and values) that is inside the request
+	"""
+	values = request.META.items()
+	values.sort()
+	html = []
+	for k, v in values:
+		html.append('<tr><td>%s</td><td>%s</td></tr>' % (k, v))
+	return HttpResponse('<table>%s</table>' % '\n'.join(html))
 		
 		
 
