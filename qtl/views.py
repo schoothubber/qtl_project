@@ -112,28 +112,31 @@ def add_chromosome_and_position(tuple_list): #[(int, marker, -logp)]
 
 
 def retrieve_logp_above_cutoff(tuple_list, cutoff):
-    '''
-    Take all the Markers and -logp values above a certain value,
-    (Usually a cutoff of 2.3 is seen as significant)
-    '''
-    
-    cutoff_list = []
+	'''
+	Take all the Markers and -logp values above a certain value,
+	(Usually a cutoff of 2.3 is seen as significant)
+	'''
+
+	cutoff_list = []
 	# Iterate through the tuple_list and exclude all tuples with a
 	#-logp value lower than the cutoff
-    for info_tuple in tuple_list:#for each tuple (int, marker, lodscore)
+	for info_tuple in tuple_list:#for each tuple (int, marker, lodscore)
+		
 		
 		#Use abs() because there are negative -logp values present
-		#The minus signs were added to indicate down regulation
-		#or does + indicate Bay ?
-		#and does - indicate Sha ?
-        if abs(info_tuple[2]) >= cutoff:
+		#The minus signs were added to indicate the differential
+		#expression from the other allel
+		# + indicates Bay and - indicates Sha
+		if abs(info_tuple[2]) >= cutoff:
+			
 				
-            cutoff_list.append(info_tuple)
-        else:
-            continue
-
+			cutoff_list.append(info_tuple)
+		else:
+			continue
+			
 	return cutoff_list #(int, marker, -logp)
-
+	
+	
 
 ###############################################################################
 ###############################################################################
@@ -250,8 +253,6 @@ def highest_tuple(region):
 		for i in range(0, len(region)-1):
 			
 			#use the abs() function because the -logp values can be negative
-			#The negative signs weer added after the calculation of the 
-			#-logp value to indicate down regulation
 			if abs(region[i][2]) < abs(region[i+1][2]):
 				
 				max_tuple = region[i+1]
@@ -552,7 +553,8 @@ def read_distinct_genes(genedict):
 
 def read_once(filename):
 	"""
-	
+	just a test...
+	turns out it doesnt help
 	"""
 	
 	fileobject = open(filename, 'r')
@@ -662,7 +664,6 @@ def readall(filename, seldict):
 	Excludelist is a list of the keys from seldict.readsel which contain
 	the genes that were found inside the qtls.
 	
-	filename = ????
 	"""
 	#Make a new list and populate it with the key's from seldict
 	excludelist = []
@@ -789,38 +790,122 @@ def check_yesno_totals(yesno_list):
 ###################################R#SCRIPT####################################
 ###############################################################################
 
-def fisher_test(data):
-	r = robjects.r
-	do_R = r.source
-	('''
-				infile=commandArgs(TRUE)[1];
-				ofile=commandArgs(TRUE)[2];
-				
-				dat<-read.table(infile,colClasses=c("character","numeric","numeric","numeric","numeric"))
-				for (i in 1:nrow(dat)) {
-				go<-dat[i,1]
-				a<-c(dat[i,2],dat[i,4],dat[i,3],dat[i,5])
-				print(a)
-				aa<-matrix(a,nrow=2)
-				print(aa)
-				fl<-fisher.test(aa,alternative="l")
-				#print(fl)
-				fu<-fisher.test(aa,alternative="g")
-				#print(fu)
-				write.table(lapply(c(infile,i,go,round(fl$p.value,digits=7),round(fu$p.value,digits=7)),paste,collapse=" "),file=ofile,append=TRUE,row.names=FALSE,quote=FALSE,col.names=FALSE)
-				}
-				q()
-				TeaTasting <-
-				matrix(c(3, 1, 1, 3),
-				nrow = 2,
-				dimnames = list(Guess = c("Milk", "Tea"),
-				Truth = c("Milk", "Tea")))
-				fisher.test(TeaTasting, alternative = "greater")
-			''')
 
-	result = do_R(data)
-	return result
+
+def fisher_test(yesno_list):
+	"""
+	Takes the output of make_yesno_list. For the datastructure of input
+	see DOC string of make_yesno_list
+	
+	The data is fed to robjects using the rpy2 package
+	The fisher test is performed for each go term.
+	
+	The output is a go term and the corresponding calculated p-values for
+	both alternative hypothesis
+	
+	##################################################
+	
+	Input data structure:
+	
+			inQTL		outQTL
+	GO		info[1]		info[3]
+	no-GO	info[2]		info[4]
+	
+	Example: 
+	
+	data = [['GO:0000003', 76, 409, 3152, 16392]]
+	
+	Contingency table:
+					inQTL	outQTL	row total
+	GO				76		3152	3228
+	no-GO			409		16392	16801
+	column total 	485		19544	20029
+	
+	##################################################
+	
+	The question asked is: 
+	
+	Knowing that 3228 genes of these 20029 genes are genes with a GO term, 
+	
+	and that 485 genes of the 20029 genes are inside a QTL,
+	 
+	and assuming that its equally likely for genes inside and outside 
+	the QTL to have a GO term, 
+	
+	what is the probability that these 3228 genes would be so unevenly 
+	distributed between the outside and inside of the QTLs?
+	
+	IF we were to choose 3228 genes at random, what is the probability that
+	3152 genes or more of them would be among the 19544 genes outside the QTL?
+	
+	and only 76 or fewer from among 485 genes inside the QTL?
+	
+	"""
+	
+	fisher_output = []
+	
+	#Create a python function called 'go_fish' to call an R function
+	#to perform the fisher test
+	go_fish = robjects.r['fisher.test']
+
+	i = 1
+	
+	for info in yesno_list:
+		#stash the go term here for later use
+		go = info[0]
 		
+		#Create a vector with the values from info
+		a = robjects.IntVector([info[1], info[3], info[2] ,info[4]])
+		#Turn it into a matrix (2x2) for the fisher test
+		aa = robjects.r['matrix'](a, nrow = 2)
+		
+		#Perform the fisher test
+		# "alternative" indicates the alternative hypothesis and must be 
+		#one of "two.sided", "greater" or "less"
+		fl = go_fish(aa,alternative="l")
+		fu = go_fish(aa,alternative="g")
+
+		#Get the p-values from both fisher tests
+		#The fisher output is an R vector-like object
+		#Items can be accessed with:
+		#the delegators rx or rx2
+		Rround = robjects.r['round']
+		fl_p_value = Rround(fl.rx2('p.value'), digits = 7)
+		fu_p_value = Rround(fu.rx2('p.value'), digits = 7)
+		
+		#Place the p-values for each go term in a list:
+		#[i, go, fl:p-value, fu:p-value]
+		individual_fisher_score = [i, go, fl_p_value[0], fu_p_value[0]]
+		
+		fisher_output.append(individual_fisher_score)
+		
+		i += 1
+		
+		
+	return fisher_output
+		
+		
+def adjustP(data):
+	"""
+	input = [i, go, fl_p_value[0], fu_p_value[0]]
+	
+	The p.adjust method is done on the pvalue of the fisher test with the
+	greater than alternative, since this value is more relevant.
+	
+	output = [i, go, fl_p_value[0], fu_p_value[0], adjusted(fu_p_value[0]) ]
+	
+	"""
+	adjusted_output = []
+	
+	for info in data:
+		
+		cor_data = robjects.r["p.adjust"](info[3], method = "BH")
+		
+		individual_adjusted = [info[0], info[1], info[2] ,info[3], cor_data[0]]
+		
+		adjusted_output.append(individual_adjusted)
+		
+	return adjusted_output
 
 ###############################################################################
 #################################Display#######################################
@@ -854,7 +939,6 @@ def SearchTraitView(request):
 		tic = time.clock()
 	
 		trait_name_u = request.GET.get('trait_name')
-		
 		
 		trait_name = trait_name_u.encode("utf-8")
 	
@@ -896,17 +980,7 @@ def SearchTraitView(request):
 			#The dictionary will be passed to the template
 			#Inside the template the key's are used to display the
 			#corresponding values
-			gene_dict = {
-						"trait_name" : trait_name,
-						"cutoff_name" : cutoff_name,
-						"l2" : l2,
-						"l3" : l3,
-						"l4" : l4,
-						"l5" : l5,
-						"l6" : l6,
-						"l8" : l8,
-						"l9" : l9
-						}
+			
 			
 			
 			###############################
@@ -955,14 +1029,33 @@ def SearchTraitView(request):
 			
 			fisher = fisher_test(yesno_list)
 			
-			R_dict = {"fisher": fisher}
+			add_adjusted_p = adjustP(fisher)
+			
+			R_dict = {	#"fisher": fisher,
+						"n_qtl": n_qtl,
+						"add_adjusted_p": add_adjusted_p}
+			
+			gene_dict = {
+						"trait_name" : trait_name,
+						"cutoff_name" : cutoff_name,
+						"l2" : l2,
+						"l3" : l3,
+						"l4" : l4,
+						"l5" : l5,
+						"l6" : l6,
+						"l8" : l8,
+						"l9" : l9,
+						"add_adjusted_p": add_adjusted_p
+						}
 	
 			toc = time.clock()
 			print "in %f seconds" % (toc-tic)
+			
+			
 			#return display_meta(request)
-			return render_to_response("wouter/get_go.html", R_dict)
+			#return render_to_response("wouter/get_go.html", R_dict)
 			#return render_to_response("wouter/get_go.html", gene_list_dict)
-			#return render_to_response("wouter/gene_list.html", gene_dict)
+			return render_to_response("wouter/gene_list.html", gene_dict)
 
 		
 	else:
@@ -978,6 +1071,7 @@ def SearchTraitView(request):
 def display_meta(request):
 	"""
 	Display all the data (keys and values) that is inside the request
+	just for kicks
 	"""
 	values = request.META.items()
 	values.sort()
