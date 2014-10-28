@@ -47,7 +47,7 @@
 
 {% endif %}
 
-<br><br><br>
+<br><br>
 
 {% if check %}
 
@@ -56,16 +56,60 @@
 {% endif %}
 
 
-{% if fisher %}
 
-	{{ fisher }}
+{% if time_R %}
+
+	Time it took for R: {{ time_R }}
+
+{% endif %}	
+
+
+
+{% if fisher_R %}
+
+	{{ fisher_R }}
+
+{% endif %}	
+
+<br><br>
+
+
+{% if time_python %}
+
+	Time it took for python: {{ time_python }}
+
+{% endif %}	
+
+
+<br><br>
+
+
+{% if fisher_python %}
+
+	{{ fisher_python }}
+
+{% endif %}	
+
+
+
+{% if RP_tuple_list %}
+
+	{% for tup in RP_tuple_list %}
+
+		<li>{{ tup }}</li>
+	
+	{% endfor %}
 
 {% endif %}	
 
 
 {% if add_adjusted_p %}
+	
+	{% for q in add_adjusted_p %}
 
-	{{ add_adjusted_p }}
+		<li>{{ q }}</li>
+			
+	{% endfor %}
 
 {% endif %}	
 

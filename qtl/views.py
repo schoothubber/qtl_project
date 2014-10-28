@@ -1,7 +1,12 @@
 import string
 import os
 import time
-import rpy2.robjects as robjects
+
+import rpy2.robjects as ro
+from rpy2.robjects.vectors import FloatVector
+import numpy
+import scipy
+from scipy import stats
 
 from django.shortcuts import render_to_response
 from django.http import HttpResponse, HttpResponseRedirect
@@ -9,6 +14,11 @@ from django.http import HttpRequest as request
 from django.template import RequestContext
 
 from .models import Experiment,Gene,Marker,LOD,Parent,RIL,Metabolite,MParent,MRIL,MLOD
+
+
+#scipy.function
+#scipy.stats.function
+#stats.function
 
 
 ###############################################################################
@@ -565,13 +575,13 @@ def read_once(filename):
 
 
 
-def read_annotation(filename, gene_list):
+def read_annotation(data, gene_list):
 	"""
 	The code in this function is based on code written by Aalt-Jan van Dijk
 	
 	This funtions takes a list containing the total number of genes from
 	all found qtl's, plus a list with similar genes and GO annotations.
-	This GO list is a file called 'QTL/qtl/documents/pred.out'
+	This GO list is a file called 'QTL/qtl/documents/ArabiGOannotations.out'
 	
 	The output is a new list containing the genes that were present in 
 	the first gene list AND in the GO list, plus the corresponding
@@ -582,9 +592,9 @@ def read_annotation(filename, gene_list):
 	#read the data from the file containing the following datastructure:
 	#[genename, GOterm, some obscure value]
 	
-	fileobject = open(filename, 'r')
-	data = fileobject.readlines()
-	fileobject.close()
+	#fileobject = open(filename, 'r')
+	#data = fileobject.readlines()
+	#fileobject.close()
 	
 	Gene_GO_list = []
 	
@@ -657,7 +667,7 @@ def readsel(gene_GO_list):
 	return seldict, golist
 	
 
-def readall(filename, seldict):
+def readall(data, seldict):
 	"""
 	The code in this function is based on script written by Aalt-Jan van Dijk
 	
@@ -672,9 +682,9 @@ def readall(filename, seldict):
 			
 	#Open a file and read its contents
 	
-	fileobject = open(filename, 'r')
-	data = fileobject.readlines()
-	fileobject.close()
+	#fileobject = open(filename, 'r')
+	#data = fileobject.readlines()
+	#fileobject.close()
 	
 	alldict = {}
 	
@@ -841,12 +851,13 @@ def fisher_test(yesno_list):
 	and only 76 or fewer from among 485 genes inside the QTL?
 	
 	"""
+	tic = time.clock()
 	
 	fisher_output = []
 	
 	#Create a python function called 'go_fish' to call an R function
 	#to perform the fisher test
-	go_fish = robjects.r['fisher.test']
+	go_fish = ro.r['fisher.test']
 
 	i = 1
 	
@@ -855,21 +866,21 @@ def fisher_test(yesno_list):
 		go = info[0]
 		
 		#Create a vector with the values from info
-		a = robjects.IntVector([info[1], info[3], info[2] ,info[4]])
+		a = ro.IntVector([info[1], info[3], info[2] ,info[4]])
 		#Turn it into a matrix (2x2) for the fisher test
-		aa = robjects.r['matrix'](a, nrow = 2)
+		aa = ro.r['matrix'](a, nrow = 2)
 		
 		#Perform the fisher test
 		# "alternative" indicates the alternative hypothesis and must be 
 		#one of "two.sided", "greater" or "less"
-		fl = go_fish(aa,alternative="l")
-		fu = go_fish(aa,alternative="g")
+		fl = go_fish(aa,alternative = "l")
+		fu = go_fish(aa,alternative = "g")
 
 		#Get the p-values from both fisher tests
 		#The fisher output is an R vector-like object
 		#Items can be accessed with:
 		#the delegators rx or rx2
-		Rround = robjects.r['round']
+		Rround = ro.r['round']
 		fl_p_value = Rround(fl.rx2('p.value'), digits = 7)
 		fu_p_value = Rround(fu.rx2('p.value'), digits = 7)
 		
@@ -880,9 +891,12 @@ def fisher_test(yesno_list):
 		fisher_output.append(individual_fisher_score)
 		
 		i += 1
+	
+	toc = time.clock()
+	
+	stopwatch = toc-tic
 		
-		
-	return fisher_output
+	return fisher_output, stopwatch
 		
 		
 def adjustP(data):
@@ -896,16 +910,147 @@ def adjustP(data):
 	
 	"""
 	adjusted_output = []
+	fu_p_value_list = []
 	
+	#store all the p values derived from the "greater" alternative fisher test
+	#in a new list
 	for info in data:
+		fu_p_value_list.append(info[3])
+	
+	#transform the list into vector so that R also understands whats
+	#going on
+	fu_p_value_vector = ro.FloatVector(fu_p_value_list)
+	
+	#perform the FDR method on the pvalue vector
+	cor_data = ro.r["p.adjust"](fu_p_value_vector, method = "BH")
+	
+	Rround = ro.r['round']
+	
+	for i in range(0, len(data)):
 		
-		cor_data = robjects.r["p.adjust"](info[3], method = "BH")
-		
-		individual_adjusted = [info[0], info[1], info[2] ,info[3], cor_data[0]]
+		Rdata = Rround(cor_data[i], digits = 7)
+		individual_adjusted = [data[i][0], data[i][1], data[i][2] ,data[i][3], Rdata[0]]
 		
 		adjusted_output.append(individual_adjusted)
 		
 	return adjusted_output
+	
+	
+###############################################################################
+##############################Test#############################################
+#########################Fisher###Scipy########################################
+###############################################################################
+
+
+def fish_for_python(data):
+	"""
+	Using scipy to do the fisher exact test on the created contingency tables
+	"""
+	tic = time.clock() 
+	
+	i = 1
+
+	fisher_output = []
+	
+	for info in data:
+		#extract go term
+		go = info[0]
+		#extract contingency table
+		c_table = [[info[1], info[3]], [info[2], info[4]]]
+		
+		#perform two alternative fisher exact test
+		fl_oddsratio, fl_pvalue = stats.fisher_exact(c_table, alternative='less')
+		fu_oddsratio, fu_pvalue = stats.fisher_exact(c_table, alternative='greater')
+		
+		#Round the p values to 7 decimals
+		fl_pvalue2 = round(fl_pvalue, 7)
+		fu_pvalue2 = round(fu_pvalue, 7)
+		
+		individual_fisher_score = [i, go, fl_pvalue2, fu_pvalue2]
+		
+		fisher_output.append(individual_fisher_score)
+		
+		
+		i += 1
+		
+		#[i, go, fl_pvalue, fu_pvalue]
+		
+	toc = time.clock()
+	
+	stopwatch = toc-tic
+	
+	return fisher_output, stopwatch
+	
+
+def compare_R_python(Rdata, Pdata):
+	"""
+	I wrote this function to compare the output and the speed of output
+	between R and Scipy. Scipy is a python package whereas R is another 
+	programming language which is accessed via python.
+	
+	Rdata == Pdata: [i, go, fl:p-value, fu:p-value]
+	
+	Result:
+	Time it took for R: 3.471709 
+
+	Time it took for python: 0.379461 
+	
+	
+	(pval from R, pval from Python, difference)
+	(0.0328236, 0.0328236, 0.0)
+	(0.0365387, 0.0365387, 0.0)
+	(0.0399749, 0.0399749, 0.0)
+	(0.0012649, 0.0012649, 0.0)
+	(0.0348573, 0.0348573, 0.0)
+	(0.0472149, 0.0472149, 0.0)
+	(0.025599, 0.025599, 0.0)
+	(0.0160245, 0.0160245, 0.0)
+	(0.0320846, 0.0320846, 0.0)
+	(0.0423715, 0.0423715, 0.0)
+	(0.0472708, 0.0472708, 0.0)
+	(0.0381725, 0.0381725, 0.0)
+	(0.0219175, 0.0219175, 0.0)
+	(0.02332, 0.02332, 0.0)
+	(0.0226028, 0.0226028, 0.0)
+	(0.0228202, 0.0228202, 0.0)
+	(0.0038569, 0.0038569, 0.0)
+	(0.0122276, 0.0122276, 0.0)
+	(0.0007248, 0.0007248, 0.0)
+	(0.0159766, 0.0159766, 0.0)
+	(0.0117458, 0.0117458, 0.0)
+	(0.037964, 0.037964, 0.0)
+	
+	Note: these are only the p values below or equal to 0.05
+	
+	Conclusion: 
+	python performs the fisher test, via SciPy, 10 times faster! than via R.
+	and the results are equal (all differences are zero).
+	
+	"""
+	
+	RP_list = []
+	
+	if len(Rdata) == len(Pdata):
+		
+		for i in range(0, len(Rdata)):
+			
+			if Pdata[i][3] <= 0.05:
+			
+				p_diff = Rdata[i][3] - Pdata[i][3]
+				p_tuple = (Rdata[i][3], Pdata[i][3], p_diff)
+				RP_list.append(p_tuple)
+			
+			else:
+				continue
+		
+		else:
+			RP_list.append("R and python produced different amounts of data")
+			
+	return RP_list
+			
+			
+
+
 
 ###############################################################################
 #################################Display#######################################
@@ -913,7 +1058,7 @@ def adjustP(data):
 ###############################################################################
 
 	
-def SearchTraitView(request):
+def SearchTraitView2(request):
 	"""
 	When a trait and a cutoff value are given on the website, these values
 	are retrieved from the database and fed to this view. 
@@ -936,10 +1081,10 @@ def SearchTraitView(request):
 	#The values 'trait_name' and 'cutoff_name' are given in the template
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
-		tic = time.clock()
+		tic_t = time.clock() # starting point of total process
+		tic = time.clock() # starting point of genelist retrieval
 	
 		trait_name_u = request.GET.get('trait_name')
-		
 		trait_name = trait_name_u.encode("utf-8")
 	
 		cutoff_name_D = request.GET.get('cutoff_name')
@@ -981,25 +1126,28 @@ def SearchTraitView(request):
 			#Inside the template the key's are used to display the
 			#corresponding values
 			
-			
+			toc = time.clock()
+			print "Time to retrieve a gene list is %f seconds" % (toc-tic)
 			
 			###############################
 			###############AJ##############
 			###############################
 	
-	
+			
+			tic = time.clock()
+			
 			#get the location of the GO annotation file
-			filename = 'pred.out'
+			filename = 'ArabiGOannotations.out'
 			module_dir = os.path.dirname(__file__)  # get current directory
 			file_path = os.path.join(module_dir, 'documents', filename)
 			
 			data = read_once(file_path)
 				
-			l10 = read_annotation(file_path, l9)
+			l10 = read_annotation(data, l9)
 			
 			seldict, golist = readsel(l10)
 			
-			alldict = readall(file_path, seldict)
+			alldict = readall(data, seldict)
 			
 			yesno_list = make_yesno_list(golist, seldict, alldict)
 			
@@ -1020,20 +1168,50 @@ def SearchTraitView(request):
 						"check": check
 						}
 						
-
+			toc = time.clock()
+			print "Time to annotate genes is %f seconds" % (toc-tic)
 				
 			###############################
 			######### R # TIME #!!!########
 			###############################
+			tic = time.clock()
+			
+			fisher_R, time_R = fisher_test(yesno_list)
+			
+			toc = time.clock()
+			print "Time for R to do the fisher test is %f seconds" % (toc-tic)
+			
+			tic = time.clock()
+			
+			add_adjusted_p = adjustP(fisher_R)
+			
+			toc = time.clock()
+			print "Time for R to perform FDR is %f seconds" % (toc-tic)
+			
+			###############################
+			#########Lets Try SciPy########
+			###############################
+			
+			tic = time.clock()
+			
+			fisher_python, time_python = fish_for_python(yesno_list)
+			
+			toc = time.clock()
+			print "Time for python to do the fisher test is %f seconds" % (toc-tic)
 			
 			
-			fisher = fisher_test(yesno_list)
+			RP_tuple_list = compare_R_python(fisher_R, fisher_python)
 			
-			add_adjusted_p = adjustP(fisher)
 			
-			R_dict = {	#"fisher": fisher,
+			
+			R_dict = {	#"fisher_R": fisher_R,
+						#"fisher_python": fisher_python,
+						"time_R": time_R,
+						"time_python": time_python,
 						"n_qtl": n_qtl,
-						"add_adjusted_p": add_adjusted_p}
+						"RP_tuple_list": RP_tuple_list,
+						#"add_adjusted_p": add_adjusted_p
+						}
 			
 			gene_dict = {
 						"trait_name" : trait_name,
@@ -1048,8 +1226,8 @@ def SearchTraitView(request):
 						"add_adjusted_p": add_adjusted_p
 						}
 	
-			toc = time.clock()
-			print "in %f seconds" % (toc-tic)
+			toc_t = time.clock()
+			print "Time to perform entire process is %f seconds" % (toc_t-tic_t)
 			
 			
 			#return display_meta(request)
@@ -1081,5 +1259,102 @@ def display_meta(request):
 	return HttpResponse('<table>%s</table>' % '\n'.join(html))
 		
 		
+		
+###############################################################################
+############################TESTING VIEW#######################################
+###############################################################################
+###############################################################################
+		
+
+def SearchTraitView(request):
+	"""
+	When a trait and a cutoff value are given on the website, these values
+	are retrieved from the database and fed to this view. 
+	They are subsequently manipulated by other functions
+	The output is sent to a nother template galled genelist.html
+	
+	The tic-toc was added to ascertain how long a search takes
+	"""
+	
+	#The template will show a checkbox, default will be unchecked
+	#unchecked means 'gxe' is not in request.GET and thus we will go for
+	#normale gene expression
+	#checked means 'gxe' is in request.GET and thus we will go for 
+	#environmental permutation
+	if 'gxe' in request.GET:
+		gxe_boolean = True
+	if 'gxe' not in request.GET:
+		gxe_boolean = False
+		
+	#The values 'trait_name' and 'cutoff_name' are given in the template
+	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
+		
+		tic_t = time.clock() # starting point of total process
+		tic = time.clock() # starting point of genelist retrieval
+	
+		trait_name_u = request.GET.get('trait_name')
+		trait_name = trait_name_u.encode("utf-8")
+	
+		cutoff_name_D = request.GET.get('cutoff_name')
+		cutoff_name = float(cutoff_name_D)
+	
+		l1 = marker_logp_list(trait_name, gxe_boolean)
+		l2 = add_chromosome_and_position(l1)
+		l3 = retrieve_logp_above_cutoff(l2, cutoff_name)
+		
+		#If no markers are found above the chosen cutoff, than display this message
+		if l3 == None:
+			message = "There are no markers with a LOD score higher than %f for trait %s" % (cutoff_name, trait_name)
+			bottle = {"message" : message}
+			return render_to_response("wouter/no_go.html", bottle)
+		
+		else:
+		
+			l4 = check_region(l3)
+			
+			#this function uses the function 
+			#highest_tuple
+			l5 = iterate_marker_tuple(l4)
+			
+			#this function uses the functions 
+			#get_chromosome_max and check_regions_on_chromosome
+			l6 = set_region_from_adjacent_markers(l5, l2)
+			
+			l7 = combine_marker_region_data(trait_name, l6)
+			
+			#this function uses the function 
+			#normalize_object_data
+			l8 = find_genes_in_regions(l7)
+			
+			l9 = read_distinct_genes(l8)
+			
+			#Place the output into a dictionary
+			#Give each key the same name as the variable for convenience
+			#The dictionary will be passed to the template
+			#Inside the template the key's are used to display the
+			#corresponding values
+			
+			toc = time.clock()
+			print "Time to retrieve a gene list is %f seconds" % (toc-tic)
+			
+			
+			
+			gene_dict = {
+						"trait_name" : trait_name,
+						"cutoff_name" : cutoff_name,
+						"l2" : l2,
+						"l3" : l3,
+						"l4" : l4,
+						"l5" : l5,
+						"l6" : l6,
+						"l8" : l8,
+						"l9" : l9,
+						}
 
 
+
+			return render_to_response("wouter/gene_list.html", gene_dict)
+
+		
+	else:
+		return render_to_response('wouter/search_trait.html')
