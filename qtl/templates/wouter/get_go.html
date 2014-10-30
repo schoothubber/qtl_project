@@ -2,11 +2,10 @@
 
 {% block content %}
 
+{% if trait_name %}
 
-{% if n_qtl %}
-
-		There are {{ n_qtl }} qtl's.<br>
-		
+	{{ trait_name }}<br>
+	
 {% endif %}
 
 
@@ -24,18 +23,10 @@
 {% endif %}
 
 		
-{% if n_GO %}
-
-		There are {{ n_GO }} annotations <br><br>
-
-{% endif %}
 
 
-<!--{% if l10 %}
 
-		{{ l10 }}
 
-{% endif %} -->
 
 {% if yesno_list %}
 		
@@ -105,12 +96,18 @@
 
 {% if add_adjusted_p %}
 	
-	{% for q in add_adjusted_p %}
+	{{ add_adjusted_p }}
 
-		<li>{{ q }}</li>
-			
-	{% endfor %}
+{% endif %}
 
-{% endif %}	
+<br><br>
+
+{% if fisher_greater_p %}
+	
+	{{ fisher_greater_p }}
+
+
+{% endif %}
+
 
 {% endblock %}

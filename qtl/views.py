@@ -1,6 +1,6 @@
-import string
 import os
 import time
+import csv
 
 import rpy2.robjects as ro
 from rpy2.robjects.vectors import FloatVector
@@ -16,15 +16,12 @@ from django.template import RequestContext
 from .models import Experiment,Gene,Marker,LOD,Parent,RIL,Metabolite,MParent,MRIL,MLOD
 
 
-#scipy.function
-#scipy.stats.function
-#stats.function
-
 
 ###############################################################################
 #################################WOUTERS#######################################
 ###################################CODE########################################
 ###############################################################################
+
 
 def marker_logp_list(trait, gxe_boolean):
     '''
@@ -561,167 +558,294 @@ def read_distinct_genes(genedict):
 
 
 
-def read_once(filename):
-	"""
-	just a test...
-	turns out it doesnt help
-	"""
-	
-	fileobject = open(filename, 'r')
-	data = fileobject.readlines()
-	fileobject.close()
-	
-	return data
-
-
-
-def read_annotation(data, gene_list):
-	"""
-	The code in this function is based on code written by Aalt-Jan van Dijk
-	
-	This funtions takes a list containing the total number of genes from
-	all found qtl's, plus a list with similar genes and GO annotations.
-	This GO list is a file called 'QTL/qtl/documents/ArabiGOannotations.out'
-	
-	The output is a new list containing the genes that were present in 
-	the first gene list AND in the GO list, plus the corresponding
-	GO annotation
-	
-	"""
-
-	#read the data from the file containing the following datastructure:
-	#[genename, GOterm, some obscure value]
+#def read_once(filename):
+	#"""
+	#just a test...
+	#turns out it doesnt help
+	#"""
 	
 	#fileobject = open(filename, 'r')
 	#data = fileobject.readlines()
 	#fileobject.close()
 	
-	Gene_GO_list = []
-	
-	for gene_GO in data:
-
-		s = string.split(gene_GO)
-	
-		#if the number of gene names in gene_list is more than zero
-		if gene_list.count(s[0])>0:
-		
-			#only store the [genename, GOterm] part of the list
-			info = s[:-1]
-			Gene_GO_list.append(info)
-
-	return Gene_GO_list
+	#return data
 
 
-def readsel(gene_GO_list):
+def read_once_csv(filename):
 	"""
-	The code in this function is based on script written by Aalt-Jan van Dijk
+	Read a csv file and place the contents in a dictionary
 	
-	gene_GO_list contains all genes with corresponding GO annotations that
-	were found in all qtls
-	
-	seldict will contain each gene from inside the found qtl as key
-	and as value a list of GO terms that subscribe to one gene
-	
+	The csv file contains rows of data
+	In each row the first index holds a gene name
+	The rest of the row holds the GO annotations
 	"""
-	#input is output van getpredfun:
-	#[genename, Goterm]	
 	
-	seldict={}
-	golist=[]
+	tic = time.clock()
 	
-	for gene_GO in gene_GO_list:
+	#data = genfromtxt(filename, delimiter = ',')
+	data_dict = {}
 	
-		gene = gene_GO[0] #gene name
-		go = gene_GO[1]   #Goterm
-	
-		#If the number of Goterms in the golist is zero
-		##################if golist.count(go) == 0:
-		if go not in golist:
+	with open(filename, 'rb') as csvobject:
+		reader = csv.reader(csvobject)
+		for row in reader:
 			
-			#add the Goterm to the golist
-			#so that each Goterm will be unique in this golist
-			golist.append(go)
-	
-		#if the dictionary already has a key named "genename"
-		if seldict.has_key(gene):
+			#key is the gene name
+			key = row[0]
+			#value is a list of go terms
+			value = row[1:]
 			
-			#tmp becomes the value beloning to seldict with key "gene"
-			#the value is a list of Go terms
-			tmp = seldict[gene]
-	  
-		else:
-			#make new list
-			tmp=[]
-			
-		# add Goterm to the new list
-		tmp.append(go)
-	
-		#add the new golist as value to a dictionary 
-		#with gene name as key 
-		seldict[gene] = tmp
-	
-		# return a dictionary with genes as keys and as value a list of 
-		# the Goterms for each gene
-		# plus a list with all used Goterms
+			data_dict[key] = value
 		
-	return seldict, golist
+	
+	toc = time.clock()
+	stopwatch = toc-tic
+	
+	return data_dict, stopwatch
+
+
+
+#def read_annotation(data, gene_list):
+	#"""
+	#The code in this function is based on code written by Aalt-Jan van Dijk
+	
+	#This funtion takes a list containing the total number of genes from
+	#all found qtl's, plus a list with similar genes and GO annotations.
+	#This GO list is a file called 'QTL/qtl/documents/ArabiGOannotations.out'
+	
+	#The output is a new list containing the genes that were present in 
+	#the first gene list AND in the GO list, plus the corresponding
+	#GO annotation
+	
+	#"""
+
+	##read the data from the file containing the following datastructure:
+	##[genename, GOterm, some obscure value]
+	
+	##fileobject = open(filename, 'r')
+	##data = fileobject.readlines()
+	##fileobject.close()
+	
+	#Gene_GO_list = []
+	
+	#for gene_GO in data:
+
+		#s = string.split(gene_GO)
+	
+		##if the number of gene names in gene_list is more than zero
+		#if gene_list.count(s[0])>0:
+		
+			##only store the [genename, GOterm] part of the list
+			#info = s[:-1]
+			#Gene_GO_list.append(info)
+
+	#return Gene_GO_list
+	
+	
+	
+def annotate_from_csv(data_dict, gene_list):
+	"""
+	This data comes from a csv file
+	data is a dictionary
+	each key is a gene name
+	the corresponding value is a list of go terms
+	"""
+	tic = time.clock()
+	
+	gene_dict = {}	
+
+	for gene in gene_list:
+		
+		if gene in data_dict.keys():
+			
+			#If the gene from the gene list is present in the data_dict
+			#then add that gene as key to the new gene_dict with 
+			#corresponding value
+			#the value is already a list of go annotations that are
+			#linked to that gene
+			gene_dict[gene] = data_dict[gene]
+			
+
+	how_many = len(gene_dict)
+
+	toc = time.clock()
+	stopwatch = toc-tic
+	
+	#Note that gene_dict = AaltJan's seldict
+	return gene_dict, how_many, stopwatch
 	
 
-def readall(data, seldict):
+def unique_GO_list(gene_dict):
 	"""
-	The code in this function is based on script written by Aalt-Jan van Dijk
+	Gene_dict contains a gene name for each key
+	The values are lists of go terms for each gene
 	
-	Excludelist is a list of the keys from seldict.readsel which contain
-	the genes that were found inside the qtls.
-	
+	Extract the go terms from the dictionary values
+	And create a list of unique go terms
 	"""
-	#Make a new list and populate it with the key's from seldict
-	excludelist = []
-	for key in seldict:
-		excludelist.append(seldict[key])
+	
+	golist = []
+	
+	for key in gene_dict:
+		
+		#Basicly for each go term in the value...
+		for go in gene_dict[key]:
 			
-	#Open a file and read its contents
-	
-	#fileobject = open(filename, 'r')
-	#data = fileobject.readlines()
-	#fileobject.close()
-	
-	alldict = {}
-	
-
-	#Iterate through each line of text in data
-	for i in data:
-		s = string.split(i)
-		
-		gene = s[0]
-		go = s[1]
-		
-		#If this list does not contain this gene
-		####################if excludelist.count(gene) == 0:
-		if gene not in excludelist:
-	  
-			# If this dictionary has a key named "gene name"  
-			if alldict.has_key(gene):
+			#make sure the go term is NOT already in the list
+			#because each go term should be unique
+			if go not in golist:
+				golist.append(go)
 				
-				#tmp becomes the value beloning to alldict with key "gene"
-				#the value is a list of Go terms
-				tmp = alldict[gene]
-    
 			else:
-				#make a new list named tmp
-				tmp = []
+				continue
+			
+	return golist
+	
+	
+	
+	
+
+#def readsel(gene_GO_list):
+	#"""
+	#The code in this function is based on script written by Aalt-Jan van Dijk
+	
+	#gene_GO_list contains all genes with corresponding GO annotations that
+	#were found in all qtls
+	
+	#seldict will contain each gene from inside the found qtl as key
+	#and as value a list of GO terms that subscribe to one gene
+	
+	#"""
+	##input is output van getpredfun:
+	##[genename, Goterm]	
+	
+	#seldict={}
+	#golist=[]
+	
+	#for gene_GO in gene_GO_list:
+	
+		#gene = gene_GO[0] #gene name
+		#go = gene_GO[1]   #Goterm
+	
+		##If the number of Goterms in the golist is zero
+		###################if golist.count(go) == 0:
+		#if go not in golist:
+			
+			##add the Goterm to the golist
+			##so that each Goterm will be unique in this golist
+			#golist.append(go)
+	
+		##if the dictionary already has a key named "genename"
+		#if seldict.has_key(gene):
+			
+			##tmp becomes the value beloning to seldict with key "gene"
+			##the value is a list of Go terms
+			#tmp = seldict[gene]
+	  
+		#else:
+			##make new list
+			#tmp=[]
+			
+		## add Goterm to the new list
+		#tmp.append(go)
+	
+		##add the new golist as value to a dictionary 
+		##with gene name as key 
+		#seldict[gene] = tmp
+	
+		## return a dictionary with genes as keys and as value a list of 
+		## the Goterms for each gene
+		## plus a list with all used Goterms
+		
+	#return seldict, golist
+
+def get_geneGO_outside_qtl(data_dict, qtl_gene_dict):
+	"""
+	What goes in is:
+	data_dict[gene_name] = [list of go terms] (of the whole genome)
+	qtl_gene_dict[gene_name] = [list of go terms] (inside the qtls)
+	
+	What comes out is:
+	outsideqtl_dict[gene_name] = [list of go terms] (outside the qtls)
+	
+	"""
+	
+	outsideqtl_dict = {}
+	
+	for key in data_dict:
+		
+		if key in qtl_gene_dict.keys():
+			
+			outsideqtl_dict[key] = data_dict[key]
+			
+		else:
+			continue
+			
+	return outsideqtl_dict
+		
+	
+
+	
+
+#def readall(data, seldict):
+	#"""
+	#The code in this function is based on script written by Aalt-Jan van Dijk
+	
+	#Excludelist is a list of the keys from seldict.readsel which contain
+	#the genes that were found inside the qtls.
+	
+	#"""
+	##Make a new list and populate it with the key's from seldict
+	#excludelist = []
+	#for key in seldict:
+		#excludelist.append(seldict[key])
+			
+	##Open a file and read its contents
+	
+	##fileobject = open(filename, 'r')
+	##data = fileobject.readlines()
+	##fileobject.close()
+	
+	#alldict = {}
+	
+
+	##Iterate through each line of text in data
+	#for i in data:
+		#s = string.split(i)
+		
+		#gene = s[0]
+		#go = s[1]
+		
+		##If this list does not contain this gene
+		#####################if excludelist.count(gene) == 0:
+		#if gene not in excludelist:
+	  
+			## If this dictionary has a key named "gene name"  
+			#if alldict.has_key(gene):
 				
-			# add the go term to the new list
-			tmp.append(go)
+				##tmp becomes the value beloning to alldict with key "gene"
+				##the value is a list of Go terms
+				#tmp = alldict[gene]
+    
+			#else:
+				##make a new list named tmp
+				#tmp = []
+				
+			## add the go term to the new list
+			#tmp.append(go)
    
-			# set tmp as value with the gene name as key in alldict
-			#tmp is a list of go terms
-			alldict[gene] = tmp
+			## set tmp as value with the gene name as key in alldict
+			##tmp is a list of go terms
+			#alldict[gene] = tmp
    
-	return alldict
+	#return alldict
 
 #seldict,golist=readsel(sys.argv[1])
 #alldict=readall(sys.argv[2],seldict.keys())
+
+
+########################################################################
+########################Prepare contingency table#######################
+########################################################################
 
 def make_yesno_list(golist, seldict, alldict):
 	"""
@@ -933,7 +1057,7 @@ def adjustP(data):
 		
 		adjusted_output.append(individual_adjusted)
 		
-	return adjusted_output
+	return adjusted_output, fu_p_value_list
 	
 	
 ###############################################################################
@@ -1058,7 +1182,7 @@ def compare_R_python(Rdata, Pdata):
 ###############################################################################
 
 	
-def SearchTraitView2(request):
+def SearchTraitView(request):
 	"""
 	When a trait and a cutoff value are given on the website, these values
 	are retrieved from the database and fed to this view. 
@@ -1118,7 +1242,7 @@ def SearchTraitView2(request):
 			#normalize_object_data
 			l8 = find_genes_in_regions(l7)
 			
-			l9 = read_distinct_genes(l8)
+			gene_list = read_distinct_genes(l8)
 			
 			#Place the output into a dictionary
 			#Give each key the same name as the variable for convenience
@@ -1137,32 +1261,37 @@ def SearchTraitView2(request):
 			tic = time.clock()
 			
 			#get the location of the GO annotation file
-			filename = 'ArabiGOannotations.out'
+			filename = 'At_geneGOlists.csv'
 			module_dir = os.path.dirname(__file__)  # get current directory
 			file_path = os.path.join(module_dir, 'documents', filename)
 			
-			data = read_once(file_path)
+			####################data = read_once(file_path)
+			data_dict, timed_read = read_once_csv(file_path)
 				
-			l10 = read_annotation(data, l9)
+			####################l10 = read_annotation(data, l9)
+			qtl_gene_dict, n_annotations, timed_annotate = annotate_from_csv(data_dict, gene_list)
 			
-			seldict, golist = readsel(l10)
+			golist = unique_GO_list(qtl_gene_dict)
+			####################seldict, golist = readsel(l10)
 			
-			alldict = readall(data, seldict)
+			####################alldict = readall(data, seldict)
+			outside_qtl_dict = get_geneGO_outside_qtl(data_dict, qtl_gene_dict)
 			
-			yesno_list = make_yesno_list(golist, seldict, alldict)
+			yesno_list = make_yesno_list(golist, qtl_gene_dict, outside_qtl_dict)
 			
 			check = check_yesno_totals(yesno_list)
 			
+			
 			n_qtl = len(l8) #number of qtl's 
-			n_genes = len(l9) #total number of genes from all qtl's
-			n_GO = len(l10) #number of GO annotations found from GO list
+			n_genes = len(gene_list) #total number of genes from all qtl's
+			#n_GO = len(l10) #number of GO annotations found from GO list
 						
 						
 			gene_list_dict = {
-						"n_GO" : n_GO,
+						#"n_GO" : n_GO,
 						"n_qtl": n_qtl,
 						"n_genes": n_genes,
-						"l10": l10,
+						#"l10": l10,
 						"l8": l8,
 						"yesno_list": yesno_list,
 						"check": check
@@ -1183,7 +1312,7 @@ def SearchTraitView2(request):
 			
 			tic = time.clock()
 			
-			add_adjusted_p = adjustP(fisher_R)
+			add_adjusted_p, fisher_greater_p = adjustP(fisher_R)
 			
 			toc = time.clock()
 			print "Time for R to perform FDR is %f seconds" % (toc-tic)
@@ -1222,8 +1351,14 @@ def SearchTraitView2(request):
 						"l5" : l5,
 						"l6" : l6,
 						"l8" : l8,
-						"l9" : l9,
+						"gene_list" : gene_list,
 						"add_adjusted_p": add_adjusted_p
+						}
+						
+			stats_dict = {
+						"trait_name" : trait_name,
+						"add_adjusted_p" : add_adjusted_p,
+						"fisher_greater_p": fisher_greater_p
 						}
 	
 			toc_t = time.clock()
@@ -1233,7 +1368,8 @@ def SearchTraitView2(request):
 			#return display_meta(request)
 			#return render_to_response("wouter/get_go.html", R_dict)
 			#return render_to_response("wouter/get_go.html", gene_list_dict)
-			return render_to_response("wouter/gene_list.html", gene_dict)
+			#return render_to_response("wouter/gene_list.html", gene_dict)
+			return render_to_response("wouter/get_go.html", stats_dict)
 
 		
 	else:
@@ -1266,7 +1402,7 @@ def display_meta(request):
 ###############################################################################
 		
 
-def SearchTraitView(request):
+def SearchTraitView2(request):
 	"""
 	When a trait and a cutoff value are given on the website, these values
 	are retrieved from the database and fed to this view. 
