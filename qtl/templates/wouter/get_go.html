@@ -2,112 +2,31 @@
 
 {% block content %}
 
-{% if trait_name %}
+{% if trait_name and cutoff_name %}
 
-	{{ trait_name }}<br>
+	You searched for trait {{ trait_name }} with a threshold of {{ cutoff_name }}<br><br>
 	
 {% endif %}
 
-
-{% for key, value in l8.items %}
-
-	<p>{{key}}</p>
-
-{% endfor %}
-
-
-{% if n_genes %}
-
-		Containing a total of {{ n_genes }} genes.<br><br>
-
-{% endif %}
-
-		
-
-
-
-
-
-{% if yesno_list %}
-		
-		{% for yesno in yesno_list %}
-
-			<li>{{ yesno }}</li>
-			
-		{% endfor %}
-
-{% endif %}
-
-<br><br>
-
-{% if check %}
-
-	{{ check }}
-
-{% endif %}
-
-
-
-{% if time_R %}
-
-	Time it took for R: {{ time_R }}
-
-{% endif %}	
-
-
-
-{% if fisher_R %}
-
-	{{ fisher_R }}
-
-{% endif %}	
-
-<br><br>
-
-
-{% if time_python %}
-
-	Time it took for python: {{ time_python }}
-
-{% endif %}	
-
-
-<br><br>
-
-
-{% if fisher_python %}
-
-	{{ fisher_python }}
-
-{% endif %}	
-
-
-
-{% if RP_tuple_list %}
-
-	{% for tup in RP_tuple_list %}
-
-		<li>{{ tup }}</li>
-	
-	{% endfor %}
-
-{% endif %}	
 
 
 {% if add_adjusted_p %}
-	
-	{{ add_adjusted_p }}
+The following enriched GO terms were found:<br><br>
 
-{% endif %}
-
+	{% for info in add_adjusted_p %}
+		<li>{{ info }}</li>
+	{% endfor %}
 <br><br>
-
-{% if fisher_greater_p %}
 	
-	{{ fisher_greater_p }}
-
+{% else %}
+<br>
+There were no significant over-representations found
+ 
 
 {% endif %}
+
+
+
 
 
 {% endblock %}

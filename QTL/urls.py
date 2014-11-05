@@ -1,10 +1,8 @@
 from django.conf.urls import patterns, include, url
-
-from django.contrib import admin
-admin.autodiscover()
+from qtl.views import BaseView
 
 urlpatterns = patterns('',
-
-    url(r'^admin/', include(admin.site.urls)),
-    url(r'^wouter/', include('qtl.urls')),
-)
+	url(r'^$', BaseView, name='home'),
+	url(r'^wouter/', include('qtl.urls')),
+	)
+	
