@@ -1,19 +1,17 @@
 import os
 import time
 import csv
+from collections import Counter
 
 import rpy2.robjects as ro
-from rpy2.robjects.vectors import FloatVector
 import numpy
 import scipy
 from scipy import stats
 
 from django.shortcuts import render_to_response
-from django.http import HttpResponse, HttpResponseRedirect
-from django.http import HttpRequest as request
-from django.template import RequestContext
+from django.http import HttpResponse
 
-from .models import Experiment,Gene,Marker,LOD,Parent,RIL,Metabolite,MParent,MRIL,MLOD
+from .models import Gene,Marker,LOD
 
 
 
@@ -61,7 +59,7 @@ def marker_logp_list(trait, gxe_boolean):
 			logp3 = float(logp2)#the actual -log p value
 			
 			#add the i for enumeration
-			#perform encode("utf-8") on each marker to reduce the sice
+			#perform encode("utf-8") on each marker to reduce the size
 			marker_logp_tuple = (i, markers[i].encode("utf-8"), logp3)
 			tuple_list.append(marker_logp_tuple)
 	        
@@ -160,6 +158,7 @@ def retrieve_logp_above_cutoff(tuple_list, cutoff):
 
 ###############################################################################
 ###############################################################################
+
 
 
 def check_region(cutoff_list):
@@ -554,9 +553,9 @@ def read_distinct_genes(genedict):
 	#i.e. no gene can be mentioned more than once
 	gene_list = []
 	
-	for key in genedict:
+	for qtl in genedict:
 		
-		for genedata in genedict[key]:
+		for genedata in genedict[qtl]:
 			
 			if genedata[0] not in gene_list:
 				gene_list.append(genedata[0])
@@ -608,6 +607,18 @@ def read_once_csv(filename):
 
 
 
+def count_missings(data_dict, gene_list):
+	
+	missing = 0
+	for gene in gene_list:
+		
+		if gene not in data_dict:
+			missing += 1
+			
+	return missing
+			
+
+
 	
 def annotate_from_csv(data_dict, gene_list):
 	"""
@@ -615,8 +626,9 @@ def annotate_from_csv(data_dict, gene_list):
 	data is a dictionary
 	each key is a gene name
 	the corresponding value is a list of go terms
+	
+	The output are two dictionaries for genes inside and outside the QTL's
 	"""
-	tic = time.clock()
 	
 	#Create two new dictionaries; 
 	# one for all the genes inside the found QTL's
@@ -624,30 +636,30 @@ def annotate_from_csv(data_dict, gene_list):
 	gene_inside_qtl_dict = {}
 	gene_outside_qtl_dict = {}
 	
-	#Iterate through the complete gene list
-	for key in data_dict:
+	#Iterate through the complete data_dict
+	#Note that we have to go through ALL the genes in order to
+	#populate both dictionaries
+	for gene in data_dict:
 		
-		if key in gene_list:
+		if gene in gene_list:
 			
 			#If the gene from the gene list is present in the data_dict
 			#then add that gene as key to the new dict with 
 			#corresponding value
 			#the value is already a list of go annotations that are
 			#linked to that gene
-			gene_inside_qtl_dict[key] = data_dict[key]
+			gene_inside_qtl_dict[gene] = data_dict[gene]
 		
-		if key not in gene_list:
+		if gene not in gene_list:
 			
 			#If the gene is not inside the QTL's then it must be outside
-			gene_outside_qtl_dict[key] = data_dict[key]
-
-	how_many_in = len(gene_inside_qtl_dict)
-	how_many_out = len(gene_outside_qtl_dict)
-
-	toc = time.clock()
-	stopwatch = toc-tic
+			gene_outside_qtl_dict[gene] = data_dict[gene]
 	
-	return gene_inside_qtl_dict, gene_outside_qtl_dict, how_many_in, how_many_out, stopwatch
+	tot_in_qtl = len(gene_inside_qtl_dict)
+	tot_out_qtl = len(gene_outside_qtl_dict)
+
+	
+	return gene_inside_qtl_dict, gene_outside_qtl_dict, tot_in_qtl, tot_out_qtl
 	
 
 def unique_GO_list(gene_dict):
@@ -679,103 +691,160 @@ def unique_GO_list(gene_dict):
 	
 
 
-#def get_geneGO_outside_qtl(data_dict, qtl_gene_dict):
-	#"""
-	#What goes in is:
-	#data_dict[gene_name] = [list of go terms] (of the whole genome)
-	#qtl_gene_dict[gene_name] = [list of go terms] (inside the qtls)
-	
-	#What comes out is:
-	#outsideqtl_dict[gene_name] = [list of go terms] (outside the qtls)
-	
-
-	#"""
-
-
-	#outsideqtl_dict = data_dict
-	
-	##Check each gene from the ca. 20.000 rows
-	#for key in qtl_gene_dict:
-		
-		##If this gene was not found inside the QTL's
-		##Then add it to the list of genes outside the QTL's
-		#if key in outsideqtl_dict.keys():
-			
-			#del outsideqtl_dict[key]
-			
-			
-	#return outsideqtl_dict
-		
-	
-
-
 ########################################################################
 ########################Prepare contingency table#######################
 ########################################################################
 
-def make_yesno_list(golist, seldict, alldict):
+
+
+def lets_see_tables(yesno_list):
 	"""
-	The code in this function is based on script written by Aalt-Jan van Dijk
+	Just for visualizing the contingency tables...
+	"""
 	
-	Output yesno_list: [[0], [1], [2], [3], [4] ]
+	c_array = []
+	i = 1
+	for info in yesno_list:
+		#extract go term
+		go = info[0]
+		#extract contingency table
+		
+		
+		total_go = info[1] + info[2]
+		total_nogo = info[3] + info[4]
+		total_qtl = info[1] + info[3]
+		total_noqtl = info[2] + info[4]
+		
+		total_total1 = total_qtl + total_noqtl
+		total_total2 = total_go + total_nogo
+		
+		
+		c_table = [[i, info[1], info[2], total_go], [info[3], info[4], total_nogo],[total_qtl, total_noqtl, total_total1, total_total2]]
+		
+		c_array.append(c_table)
+		
+		i += 1
+		
+	print "number of c tables=" , i
+		
+	return c_array
+
+
+
+
+def make_go_array(gene_in_qtl_dict):
+	"""
+	Make go_array from dict values
+	"""
+
+	go_array = []
+	
+	for gene in gene_in_qtl_dict:
+		
+		go_array.append(gene_in_qtl_dict[gene])
+
+
+	return go_array
+
+
+
+
+def flatten_array(go_array):
+	"""
+	Flatten one level of nesting
+	"""
+
+	flattened_list = []
+	for go_list in go_array:
+		
+		for go in go_list:
+			
+			flattened_list.append(go)
+
+	
+	return flattened_list
+	
+	
+def count_all_goterms(go_list):
+	"""
+	Count all go terms in the list in one swift subroutine
+	"""
+
+	counted_go_dict = Counter(go_list)
+
+	
+	return counted_go_dict
+	
+
+
+
+def populate_contingency_table(go_in_qtl_dict, go_out_qtl_dict, golist, total_in_qtl, total_out_qtl):
+	"""
+	Try to find a faster way to calculate the contingency tables
+	-edit: success, went from 10 seconds to 0.01
+	
+	c_table n: [[0], [1], [2], [3], [4] ]
 	
 	[0] = 'GO annotation'
 	[1] = number of genes with 'GO term' inside all found qtl's
-	[2] = number of genes without 'GO term' inside all found qtl's
-	[3] = number of genes with 'GO term' outside all found qtl's
+	[2] = number of genes with 'GO term' outside all found qtl's
+	[3] = number of genes without 'GO term' inside all found qtl's
 	[4] = number of genes without 'GO term' outside all found qtl's
 	
-	seldict contains all genes, with corresponding GO terms, inside the qtl's
-	whereas
-	alldict contains all genes, with corresponding GO terms, outside the qtl's
+	
+	c_table layout:
+	
+				QTL			noQTL
+			_________________________	
+	GO		|	n11		|	n12		|
+	noGO	|	n21		|	n22		|
+	total	|	n31		|	n32		|
+			|___________|___________|		
+	
 	"""
 	
-	yesno_list = []
+	c_array = []
+
 	
-	#Iterate through each GO term in the golist
-	for go in golist: # [0]
+	n31 = total_in_qtl
+	n32 = total_out_qtl
+
+	
+	for go in golist:
 		
-		in_yes = 0 # [1]
-		in_no = 0 # [2]
-		
-		out_yes = 0 # [3]
-		out_no = 0 # [4]
-		
-		#Iterate through each gene from seldict
-		#calculate output for [1] and [2] 
-		for gene in seldict.keys():
+		if go in go_in_qtl_dict and go in go_out_qtl_dict:
 			
-			if go in seldict[gene]:
-				in_yes += 1
-			else:
-				in_no += 1
-				
-		
-		#Iterate through each gene from alldict
-		#calculate output for [3] and [4] 
-		for gene in alldict.keys():
+			n11 = go_in_qtl_dict[go]
+			n12 = go_out_qtl_dict[go]
+			n21 = n31 - n11
+			n22 = n32 - n12
 			
-			if go in alldict[gene]:
-				out_yes += 1
-			else:
-				out_no += 1
-				
-		go_yesno = [go, in_yes, in_no, out_yes, out_no]
-		yesno_list.append(go_yesno)
+			c_table = [go, n11, n12, n21, n22]
 		
-	return yesno_list
+			c_array.append(c_table)
+	
+
+	
+	return c_array
+	
 
 
-
+	
 ###############################################################################
 ###########################Fisher###Test#######################################
-#############################   R   ###########################################
+################################Scipy##########################################
 ###############################################################################
 
 
-	
-def fisher_test(yesno_list):
+
+def fish_for_python(data):
 	"""
+	Using scipy to do the fisher exact test on the created contingency tables
+	
+	The speed of doing the fishers exact test was compared in scipy and 
+	imported R objects. It was found that the test in scipy gave the same results
+	but at 10 times the speed.
+	
 	Takes the output of make_yesno_list. For the datastructure of input
 	see DOC string of make_yesno_list
 	
@@ -790,8 +859,8 @@ def fisher_test(yesno_list):
 	Input data structure:
 	
 			inQTL		outQTL
-	GO		info[1]		info[3]
-	no-GO	info[2]		info[4]
+	GO		info[1]		info[2]
+	no-GO	info[3]		info[4]
 	
 	Example: 
 	
@@ -823,70 +892,6 @@ def fisher_test(yesno_list):
 	and only 76 or fewer from among 485 genes inside the QTL?
 	
 	"""
-	tic = time.clock()
-	
-	fisher_output = []
-	
-	#Create a python function called 'go_fish' to call an R function
-	#to perform the fisher test
-	go_fish = ro.r['fisher.test']
-
-	i = 1
-	
-	for info in yesno_list:
-		#stash the go term here for later use
-		go = info[0]
-		
-		#Create a vector with the values from info
-		a = ro.IntVector([info[1], info[3], info[2] ,info[4]])
-		#Turn it into a matrix (2x2) for the fisher test
-		aa = ro.r['matrix'](a, nrow = 2)
-		
-		#Perform the fisher test
-		# "alternative" indicates the alternative hypothesis and must be 
-		#one of "two.sided", "greater" or "less"
-		fl = go_fish(aa,alternative = "l")
-		fu = go_fish(aa,alternative = "g")
-
-		#Get the p-values from both fisher tests
-		#The fisher output is an R vector-like object
-		#Items can be accessed with:
-		#the delegators rx or rx2
-		Rround = ro.r['round']
-		fl_p_value = Rround(fl.rx2('p.value'), digits = 7)
-		fu_p_value = Rround(fu.rx2('p.value'), digits = 7)
-		
-		#Place the p-values for each go term in a list:
-		#[i, go, fl:p-value, fu:p-value]
-		individual_fisher_score = [i, go, fl_p_value[0], fu_p_value[0]]
-		
-		fisher_output.append(individual_fisher_score)
-		
-		i += 1
-	
-	toc = time.clock()
-	
-	stopwatch = toc-tic
-		
-	return fisher_output
-	
-	
-	
-###############################################################################
-###########################Fisher###Test#######################################
-################################Scipy##########################################
-###############################################################################
-
-
-
-def fish_for_python(data):
-	"""
-	Using scipy to do the fisher exact test on the created contingency tables
-	
-	The speed of doing the fishers exact test was compared in scipy and 
-	imported R objects. It was found that the test in scipy gave the same results
-	but at 10 times the speed.
-	"""
 	
 	i = 1
 
@@ -896,7 +901,7 @@ def fish_for_python(data):
 		#extract go term
 		go = info[0]
 		#extract contingency table
-		c_table = [[info[1], info[3]], [info[2], info[4]]]
+		c_table = [[info[1], info[2]], [info[3], info[4]]]
 		
 		#perform two alternative fisher exact test
 		fl_oddsratio, fl_pvalue = stats.fisher_exact(c_table, alternative='less')
@@ -983,6 +988,164 @@ def multiple_test(data):
 		adjusted_output.append(individual_adjusted)
 		
 	return adjusted_output
+	
+	
+	
+###############################################################################
+############################Post Processing#####################################
+###############################################################################
+###############################################################################
+	
+
+
+	
+	"""
+	(A)gene function must be present in more than 50% of the QTL regions of a trait
+	(B)gene functions must not be predicted for more than 1% of all genes
+	
+	Files Needed: 
+	
+	(1)-List of enriched GO terms
+	(2)-Dictionary[QTL] = gene_list
+	(3)-number of total genes
+	
+	(A): count in howmany of the found QTls in (2) each GO in (1) occurs
+	restriction = QTL_with_GO count / total_QTL > = 0.5
+	
+	(B): devide the number of genes for each GO in (1) to len((3))
+	restriction = genes_with_GO / len((3)) <= 0.01
+	
+	"""
+
+
+
+def make_qtl_go_dict(gene_in_qtl_dict, qtl_gene_dict):
+	"""
+	Make a new dictionary with QTLs as keys.
+	replace the values of genelists with corresponding golists
+	Resulting in a dictionary of QTLs with a list of the found go terms
+	for each QTL
+	"""
+	
+	qtl_go_dict = {}
+	
+	#Each of these qtls contain a gene_list which will be iterated through
+	for qtl in qtl_gene_dict:
+		
+		gene_loc_list = qtl_gene_dict[qtl]
+		temp_go_value = []
+		
+		#Iterate through gene_list
+		for gene_loc in gene_loc_list:
+			#for gene in qtl related gene_list
+			gene = gene_loc[0]
+			
+			if gene in gene_in_qtl_dict:
+				
+				#add golist from the value to the existing golist
+				temp_go_value.extend(gene_in_qtl_dict[gene])
+			
+		
+		qtl_go_dict[qtl] = temp_go_value
+
+	
+	return qtl_go_dict
+				
+
+
+def post_process_A(enriched_golist, qtl_go_dict):
+	"""
+	Check for each GO term if it is present in the QTLs
+	gene function must be present in more than 50% of the QTL regions of a trait
+	"""
+	
+	approved_golist_A = []
+	
+	#Iterate through the go terms that were enriched for the genes
+	#in the found QTLs
+	for go_info in enriched_golist:
+		
+		go = go_info[1]
+		is_go_in_qtl_count = 0.0
+		total_qtl = float(len(qtl_go_dict))
+		
+		#For each QTL in the dictionary, check if a go term is present
+		for qtl in qtl_go_dict:
+			
+			if go in qtl_go_dict[qtl]:
+				
+				is_go_in_qtl_count += 1.0
+		
+		go_fraction_score = round(is_go_in_qtl_count / total_qtl, 7)
+		
+		if go_fraction_score >= 0.5:
+			
+			go_info.append(go_fraction_score)
+			approved_golist_A.append(go_info)
+			
+	return approved_golist_A
+
+
+	
+	
+def post_process_B(approved_golist_A, gene_in_qtl_dict):
+	"""
+	(B)gene functions must not be predicted for more than 1% of all genes
+	
+	"""
+	
+	#Count for how many genes in the QTL a go term from golist is predicted
+	#Need approved_golist_A + gene_in_qtl_dict
+	
+	approved_golist_B = []
+	total_number_genes_in_qtl = float(len(gene_in_qtl_dict))
+	
+	for go_info in approved_golist_A:
+		
+		go = go_info[1]
+		go_count = 0.0
+		gene_list = []
+		
+		for gene in gene_in_qtl_dict:
+			
+			if go in gene_in_qtl_dict[gene]:
+				
+				go_count += 1.0
+				gene_list.append(gene)
+				
+		go_fraction_score = round(go_count / total_number_genes_in_qtl, 7)
+		
+		if go_fraction_score <= 0.01:
+			
+			go_info.append(go_fraction_score)
+			go_info.extend(gene_list)
+			approved_golist_B.append(go_info)
+			
+	return approved_golist_B
+			
+			
+###############################################################################
+#########################Create GO Links#######################################
+###############################################################################
+
+
+def GO_link_creator(approved_golist_B):
+	"""
+	This function will prepare hyperlinks for the identified GO terms
+	to be displayed
+	"""
+	
+	golink_dict = {}
+	main_url = "http://www.ebi.ac.uk/QuickGO/GTerm?id="
+	
+	for go_info in approved_golist_B:
+		
+		go = go_info[1]
+		link = main_url + go
+		
+		golink_dict[go] = link
+		
+	return golink_dict
 
 
 
@@ -1057,9 +1220,11 @@ def SearchTraitView(request):
 			
 			#this function uses the function 
 			#normalize_object_data
-			l8 = find_genes_in_regions(l7)
+			gene_dict = find_genes_in_regions(l7)
 			
-			gene_list = read_distinct_genes(l8)
+			gene_list = read_distinct_genes(gene_dict)
+			
+
 			
 			#Place the output into a dictionary
 			#Give each key the same name as the variable for convenience
@@ -1077,8 +1242,6 @@ def SearchTraitView(request):
 			##############################################################
 	
 			
-			tic = time.clock()
-			
 			#get the location of the GO annotation file
 			filename = 'At_geneGOlists.csv'
 			module_dir = os.path.dirname(__file__)  # get current directory
@@ -1086,43 +1249,52 @@ def SearchTraitView(request):
 			
 			#read the rows from the csv file mentioned above in filename
 			data_dict, timed_read = read_once_csv(file_path)
+				
+			print "gene_list=", len(gene_list)	
+			print "data_dict=", (len(data_dict) - len(gene_list))	
 			
-			#Create a dictionary containing all genes inside the found qtls
-			#with corresponding GO annotations	
-			########qtl_gene_dict, n_annotations, timed_annotate = annotate_from_csv(data_dict, gene_list)
+			gene_inside_qtl_dict, gene_outside_qtl_dict, tot_in_qtl, tot_out_qtl = annotate_from_csv(data_dict, gene_list)
 			
-			gene_inside_qtl_dict, gene_outside_qtl_dict, how_many_in, how_many_out, stopwatch = annotate_from_csv(data_dict, gene_list)
+			print "genes in qtl", len(gene_inside_qtl_dict)
+			print "genes out qtl", len(gene_outside_qtl_dict)
+		
+			golist_unique = unique_GO_list(gene_inside_qtl_dict)
 			
-			golist = unique_GO_list(gene_inside_qtl_dict)
+			miss = count_missings(data_dict, gene_list)
+			print "%d genes from gene_list were not found in data_dict" % miss
 			
-			#Create a dictionary containing all genes outside the found qtls
-			#with corresponding GO annotations
-			#################outside_qtl_dict = get_geneGO_outside_qtl(data_dict, qtl_gene_dict)
 			
+			#Prepare for counted genes inside qtl:
+			golist_array_in = make_go_array(gene_inside_qtl_dict)
+			golist_in = flatten_array(golist_array_in)
+			c_go_in_qtl_dict = count_all_goterms(golist_in)
+			
+			
+			#Prepare for counted genes outside qtl:
+			golist_array_out = make_go_array(gene_outside_qtl_dict)
+			golist_out = flatten_array(golist_array_out)
+			c_go_out_qtl_dict = count_all_goterms(golist_out)
+			
+			
+			##############################################################
+			##############################################################
+			##############################################################		
 			#Create a contingency table for the Fishers exact test
 			#Count all genes with and without GO annotations
 			#Count all genes inside and outside the QTLs
-			yesno_list = make_yesno_list(golist, gene_inside_qtl_dict, gene_outside_qtl_dict)
+			
+			tic = time.clock()
+			c_array = populate_contingency_table(c_go_in_qtl_dict, c_go_out_qtl_dict, golist_unique, tot_in_qtl, tot_out_qtl)
+			toc = time.clock()
+			print "Time to make contingency table is %f seconds" % (toc-tic)			
+			
+			#tic = time.clock()
+			#c_array = make_yesno_list(golist, gene_inside_qtl_dict, gene_outside_qtl_dict)
+			#toc = time.clock()
+			#print "Time to make contingency table is %f seconds" % (toc-tic)
+
 
 			
-			
-			n_qtl = len(l8) #number of qtl's 
-			n_genes = len(gene_list) #total number of genes from all qtl's
-			#n_GO = len(l10) #number of GO annotations found from GO list
-						
-						
-			gene_list_dict = {
-						#"n_GO" : n_GO,
-						"n_qtl": n_qtl,
-						"n_genes": n_genes,
-						#"l10": l10,
-						"l8": l8,
-						"yesno_list": yesno_list
-						}
-						
-			toc = time.clock()
-			print "Time to annotate genes is %f seconds" % (toc-tic)
-				
 				
 				
 			##############################################################
@@ -1133,29 +1305,53 @@ def SearchTraitView(request):
 			
 			#perform the fisher exact test on all created contingency
 			#tables
-			#fisher_python = fish_for_python(yesno_list)
-			fisher_R = fisher_test(yesno_list)
+			fisher_python = fish_for_python(c_array)
 			
 			#only allow the results with p values below alpha to pass
 			alpha = 0.05
-			significant_info = extract_significant_result(fisher_R, alpha)
+			significant_info = extract_significant_result(fisher_python, alpha)
 			
 			#perform a multiple test
-			add_adjusted_p = multiple_test(significant_info)
+			enriched_golist = multiple_test(significant_info)
+			
+			#Post processing
+			qtl_go_dict = make_qtl_go_dict(gene_inside_qtl_dict, gene_dict)
+			
+
+			#A
+			tic = time.clock()
+			approved_golistA = post_process_A(enriched_golist, qtl_go_dict)
+			toc = time.clock()
+			print "Time to approve enrichment A is %f seconds" % (toc-tic)
 			
 			
-						
+			#B
+			tic = time.clock()
+			approved_golistB = post_process_B(approved_golistA, gene_inside_qtl_dict)
+			toc = time.clock()
+			print "Time to approve enrichment B is %f seconds" % (toc-tic)
+			
+			#GO links:
+			golink_dict = GO_link_creator(approved_golistB)
+			
+			
+			c_array_display = lets_see_tables(c_array)
+					
 			stats_dict = {
 						"trait_name" : trait_name,
 						"cutoff_name" : cutoff_name,
-						#"fisher_python" : fisher_python,
-						#"significant_info" : significant_info,
-						"add_adjusted_p" : add_adjusted_p
+						"gene_dict" : gene_dict,
+						#"enriched_golist" : enriched_golist,
+						"approved_golistB" : approved_golistB,
+						"golink_dict" : golink_dict, 
+						"c_array_display" : c_array_display,
 						}
-	
+			
+			
 			toc_t = time.clock()
 			print "Time to perform entire process is %f seconds" % (toc_t-tic_t)
 			
+
 			
 			#return display_meta(request)
 			return render_to_response("wouter/get_go.html", stats_dict)
@@ -1163,9 +1359,6 @@ def SearchTraitView(request):
 		
 	else:
 		return render_to_response('wouter/search_trait.html')
-
-
-
 
 
 
@@ -1223,8 +1416,8 @@ def CheckTraitView(request):
 			number_of_qtl = len(l7)
 			
 			#Second search for the amount of GO enrichments
-			l8 = find_genes_in_regions(l7)
-			gene_list = read_distinct_genes(l8)
+			gene_dict = find_genes_in_regions(l7)
+			gene_list = read_distinct_genes(gene_dict)
 			
 			number_of_genes = len(gene_list)
 			
@@ -1232,12 +1425,13 @@ def CheckTraitView(request):
 			combined_stats.append([trait_name, number_of_qtl, number_of_genes])
 			
 			
-			print "trait %s has %d qtls with %d genes" % (trait_name, number_of_qtl, number_of_genes)
+			#print "trait %s has %d qtls with %d genes" % (trait_name, number_of_qtl, number_of_genes)
 
 		toc = time.clock()
 		print "Time to perform trait check is %f seconds" % (toc-tic)
 	
 		stats_dict = {
+					"cutoff_name" : cutoff_name,
 					"combined_stats" : combined_stats
 					}
 	
@@ -1370,3 +1564,7 @@ def SearchTraitView2(request):
 		
 	else:
 		return render_to_response('wouter/search_trait.html')
+		
+		
+		
+	
