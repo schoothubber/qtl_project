@@ -2,16 +2,27 @@ import os
 import time
 import csv
 from collections import Counter
+from sortedcontainers import SortedList, SortedSet, SortedDict
+import random
 
 import rpy2.robjects as ro
-import numpy
+import numpy as np
 import scipy
 from scipy import stats
+from matplotlib import pylab
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+from pylab import *
+import PIL #Python Imaging Library
+from PIL import Image
+import StringIO
 
 from django.shortcuts import render_to_response
+from django.template import RequestContext, loader
 from django.http import HttpResponse
 
 from .models import Gene,Marker,LOD
+
 
 
 
@@ -493,7 +504,7 @@ def find_genes_in_regions(region_list):
 	the tuple as key and the list as value
 	"""
 	
-	gene_dict = {}
+	gene_dict = SortedDict()
 	
 	complete_gene_list = Gene.objects.values_list("locus_identifier","chromosome", "start", "end")
 	
@@ -501,12 +512,12 @@ def find_genes_in_regions(region_list):
 		#Only look at the genes on a specific chromosome
 		chromosome_spec_list = complete_gene_list.filter(chromosome = region[1])
 		#Exclude all genes with basepair locations below the first marker
-		remove_front_genes = chromosome_spec_list.exclude(start__lt = region[2])
+		remove_genes_ahead = chromosome_spec_list.exclude(start__lt = region[2])
 		#Exclude all genes with basepair locations above the last marker
-		remove_end_genes = remove_front_genes.exclude(end__gt = region[3])
+		remove_genes_behind = remove_genes_ahead.exclude(end__gt = region[3])
 		
 		#normalize the database data
-		normal_list = normalize_object_data(remove_end_genes)
+		normal_list = normalize_object_data(remove_genes_behind)
 		
 		#add each region and list of genes to the dictionary gene_dict
 		#with the tuple as a key and the gene list as a value
@@ -607,15 +618,27 @@ def read_once_csv(filename):
 
 
 
-def count_missings(data_dict, gene_list):
+def segregate_gene_list(data_dict, gene_list):
+	"""
+	Take a dictionary, containing all the genes for which 1 or more GO terms
+	are known, derived from a csv file. And take a list of genes that were 
+	located within the identified QTL regions.
 	
-	missing = 0
-	for gene in gene_list:
-		
-		if gene not in data_dict:
-			missing += 1
-			
-	return missing
+	Using pythons set() mechanics segregate the list of genes into 2 new
+	lists of genes:
+	1: a list of genes present in the data file
+	2: a list of genes absent in the data file
+	"""
+
+	
+	genes_from_file = set(data_dict.keys())
+	genes_from_qtl = set(gene_list)
+	
+	present_genes = genes_from_file & genes_from_qtl
+	missing_genes = genes_from_qtl - present_genes
+	
+	
+	return missing_genes, present_genes
 			
 
 
@@ -662,10 +685,12 @@ def annotate_from_csv(data_dict, gene_list):
 	return gene_inside_qtl_dict, gene_outside_qtl_dict, tot_in_qtl, tot_out_qtl
 	
 
-def unique_GO_list(gene_dict):
+def unique_GO_list(gene_in_qtl_dict):
 	"""
 	Gene_dict contains a gene name for each key
 	The values are lists of go terms for each gene
+	Inside the QTL
+	
 	
 	Extract the go terms from the dictionary values
 	And create a list of unique go terms
@@ -673,10 +698,10 @@ def unique_GO_list(gene_dict):
 	
 	golist = []
 	
-	for key in gene_dict:
+	for gene in gene_in_qtl_dict:
 		
 		#Basicly for each go term in the value...
-		for go in gene_dict[key]:
+		for go in gene_in_qtl_dict[gene]:
 			
 			#make sure the go term is NOT already in the list
 			#because each go term should be unique
@@ -719,7 +744,7 @@ def lets_see_tables(yesno_list):
 		total_total2 = total_go + total_nogo
 		
 		
-		c_table = [[i, info[1], info[2], total_go], [info[3], info[4], total_nogo],[total_qtl, total_noqtl, total_total1, total_total2]]
+		c_table = [[i], [info[1], info[2], total_go], [info[3], info[4], total_nogo],[total_qtl, total_noqtl, total_total1, total_total2]]
 		
 		c_array.append(c_table)
 		
@@ -798,7 +823,7 @@ def populate_contingency_table(go_in_qtl_dict, go_out_qtl_dict, golist, total_in
 			_________________________	
 	GO		|	n11		|	n12		|
 	noGO	|	n21		|	n22		|
-	total	|	n31		|	n32		|
+	total	|	n31		|	n32		|	n33
 			|___________|___________|		
 	
 	"""
@@ -808,7 +833,7 @@ def populate_contingency_table(go_in_qtl_dict, go_out_qtl_dict, golist, total_in
 	
 	n31 = total_in_qtl
 	n32 = total_out_qtl
-
+	n33 = n31 + n32
 	
 	for go in golist:
 		
@@ -825,7 +850,7 @@ def populate_contingency_table(go_in_qtl_dict, go_out_qtl_dict, golist, total_in
 	
 
 	
-	return c_array
+	return c_array, n33
 	
 
 
@@ -993,29 +1018,10 @@ def multiple_test(data):
 	
 ###############################################################################
 ############################Post Processing#####################################
-###############################################################################
+####################AaltJan has some demands!###################################
 ###############################################################################
 	
 
-
-	
-	"""
-	(A)gene function must be present in more than 50% of the QTL regions of a trait
-	(B)gene functions must not be predicted for more than 1% of all genes
-	
-	Files Needed: 
-	
-	(1)-List of enriched GO terms
-	(2)-Dictionary[QTL] = gene_list
-	(3)-number of total genes
-	
-	(A): count in howmany of the found QTls in (2) each GO in (1) occurs
-	restriction = QTL_with_GO count / total_QTL > = 0.5
-	
-	(B): devide the number of genes for each GO in (1) to len((3))
-	restriction = genes_with_GO / len((3)) <= 0.01
-	
-	"""
 
 
 
@@ -1086,9 +1092,10 @@ def post_process_A(enriched_golist, qtl_go_dict):
 	return approved_golist_A
 
 
-	
-	
-def post_process_B(approved_golist_A, gene_in_qtl_dict):
+
+
+
+def post_process_B(approved_golist_A, gene_in_qtl_dict, gene_out_qtl_dict):
 	"""
 	(B)gene functions must not be predicted for more than 1% of all genes
 	
@@ -1098,54 +1105,209 @@ def post_process_B(approved_golist_A, gene_in_qtl_dict):
 	#Need approved_golist_A + gene_in_qtl_dict
 	
 	approved_golist_B = []
-	total_number_genes_in_qtl = float(len(gene_in_qtl_dict))
+	n_genes_in_qtl = len(gene_in_qtl_dict)
+	n_genes_out_qtl = len(gene_out_qtl_dict)	
+	total_number_genes = float(n_genes_in_qtl + n_genes_out_qtl)
+	print "total genes:", total_number_genes
+	
+	#Inherit the SortedDict which will enable the keys to remain sorted
+	go_gene_dict_full = SortedDict()
+	go_gene_dict_reduced = SortedDict()
 	
 	for go_info in approved_golist_A:
 		
 		go = go_info[1]
 		go_count = 0.0
-		gene_list = []
+		gene_list_in = []
+
 		
 		for gene in gene_in_qtl_dict:
 			
 			if go in gene_in_qtl_dict[gene]:
-				
 				go_count += 1.0
-				gene_list.append(gene)
+				#only add a gene if its found in a QTL
+				gene_list_in.append(gene)				
+		
+		for gene in gene_out_qtl_dict:
+			
+			if go in gene_out_qtl_dict[gene]:
+				go_count += 1.0				
+			
 				
-		go_fraction_score = round(go_count / total_number_genes_in_qtl, 7)
+		go_fraction_score = round(go_count / total_number_genes, 7)
+
 		
 		if go_fraction_score <= 0.01:
-			
+
 			go_info.append(go_fraction_score)
-			go_info.extend(gene_list)
-			approved_golist_B.append(go_info)
+			go_info_tuple = tuple(go_info)
+			go_gene_dict_full[go_info_tuple] = gene_list_in
 			
-	return approved_golist_B
+			go_reduced = go_info_tuple[1]
+			go_gene_dict_reduced[go_reduced] = gene_list_in
 			
+	return go_gene_dict_full , go_gene_dict_reduced
+
+
+			
+		
 			
 ###############################################################################
-#########################Create GO Links#######################################
+#########################Create url Links######################################
 ###############################################################################
 
 
-def GO_link_creator(approved_golist_B):
+
+
+def GO_link_creator(GOterm):
 	"""
 	This function will prepare hyperlinks for the identified GO terms
 	to be displayed
 	"""
 	
+	#go_list = approved_godict.keys()
 	golink_dict = {}
 	main_url = "http://www.ebi.ac.uk/QuickGO/GTerm?id="
 	
-	for go_info in approved_golist_B:
+	#for go_info in go_list:
 		
-		go = go_info[1]
-		link = main_url + go
+		#go = go_info[1]
+		#link = main_url + go
 		
-		golink_dict[go] = link
+		#golink_dict[go] = link
 		
-	return golink_dict
+		
+	link = main_url + GOterm
+	
+	go_link_tuple = (link, GOterm)
+		
+	return go_link_tuple
+
+
+
+
+
+def gene_link_creator(gene):
+	"""
+	Take a trait and create a link to a website
+	
+	Output is a list with link and gene name
+	"""
+	
+	main_url_begin = "http://www.arabidopsis.org/servlets/Search?type=general&search_action=detail&method=1&show_obsolete=F&name="
+	main_url_end = "&sub_type=gene&SEARCH_EXACT=4&SEARCH_CONTAINS=1"
+
+		
+	link = main_url_begin + gene + main_url_end
+	description = get_trait_description(gene)
+	genelink_list = [link, gene, description]
+	
+	return genelink_list
+	
+
+	
+###############################################################################	
+#######################Prepare data for Display################################	
+###############################################################################	
+
+
+	
+def get_trait_description(trait):
+	"""
+	Retrieve the functional description of the requested trait from the database
+	"""
+	
+	try:
+		trait_descr = Gene.objects.get(locus_identifier = trait).gene_model_description
+		
+	except Gene.DoesNotExist:
+		trait_descr = "NA"
+	
+	return trait_descr	
+
+
+
+
+def get_genes_with_go_from_qtl(qtl_gene_dict, go_dict):
+	"""
+	Get the genes from each QTL for which a function was predicted
+	
+	In order to do this make a set() of the gene lists in go_dict
+	And also make a set() of the gene list in qtl_gene_dict
+	
+	Compare the sets 
+	Extend the gene lists
+	and the ones that are intersecting should remain
+	
+	This also has to be done for the gene list per go term
+	"""
+	
+	qtl_gogenes_dict = SortedDict()
+	
+	for qtl in qtl_gene_dict:
+		
+		intersecting_genes = []
+		gene_list111 = qtl_gene_dict[qtl]
+		gene_list11 = [str(i[0]) for i in gene_list111]
+		gene_list1 = set(gene_list11)
+		
+		for go in go_dict:
+			
+			genelist2 = set(go_dict[go])
+			temp_list = gene_list1 & genelist2
+			
+			intersecting_genes.extend(temp_list)
+		
+		qtl_gogenes_dict[qtl] = sorted(intersecting_genes)
+		
+	return qtl_gogenes_dict
+		
+	
+
+
+def link_the_linked_links(qtl_gene_dict, go_dict):
+	"""
+	Prepare the display of the gene list for each go term 
+	Divide the genelist of each go term into presence in QTLs
+	"""
+	
+	go_genes_qtl_dict = SortedDict()
+	
+	for go in go_dict:
+
+		
+		#This will be the key in the dictionary
+		link_go_tuple = GO_link_creator(go)
+
+		
+		intersecting_array = []
+		go_gene_set = set(go_dict[go])
+		#print sorted(go_gene_set)
+		for qtl in qtl_gene_dict:
+			
+			gene_list111 = qtl_gene_dict[qtl]
+			gene_list11 = [str(i[0]) for i in gene_list111]
+			qtl_gene_set = set(gene_list11)
+			intersecting_genes = go_gene_set & qtl_gene_set
+			
+			intersecting_gene_link_list = []
+			sorted_intersecting_genes = sorted(intersecting_genes)
+			
+			for gene in sorted_intersecting_genes:
+				
+				intersecting_gene_link_list.append(gene_link_creator(gene))
+
+
+				
+			intersecting_array.append(sorted(intersecting_gene_link_list))
+			
+			
+		go_genes_qtl_dict[link_go_tuple] = intersecting_array
+		
+	return go_genes_qtl_dict
+
+
+
 
 
 
@@ -1185,6 +1347,7 @@ def SearchTraitView(request):
 	#The values 'trait_name' and 'cutoff_name' are given in the template
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
+		
 		tic_t = time.clock() # starting point of total process
 		tic = time.clock() # starting point of genelist retrieval
 	
@@ -1193,16 +1356,18 @@ def SearchTraitView(request):
 	
 		cutoff_name_D = request.GET.get('cutoff_name')
 		cutoff_name = float(cutoff_name_D)
-	
+
+		trait_function = get_trait_description(trait_name)		
+
 		l1 = marker_logp_list(trait_name, gxe_boolean)
 		l2 = add_chromosome_and_position(l1)
 		l3 = retrieve_logp_above_cutoff(l2, cutoff_name)
-		
+
 		#If no markers are found above the chosen cutoff, than display this message
-		if l3 == None:
+		if len(l3) == 0:
 			message = "There are no markers with a LOD score higher than %f for trait %s" % (cutoff_name, trait_name)
 			bottle = {"message" : message}
-			return render_to_response("wouter/no_go.html", bottle)
+			return render_to_response("wouter/display_individual_trait.html", bottle)
 		
 		else:
 		
@@ -1249,20 +1414,28 @@ def SearchTraitView(request):
 			
 			#read the rows from the csv file mentioned above in filename
 			data_dict, timed_read = read_once_csv(file_path)
-				
-			print "gene_list=", len(gene_list)	
-			print "data_dict=", (len(data_dict) - len(gene_list))	
 			
-			gene_inside_qtl_dict, gene_outside_qtl_dict, tot_in_qtl, tot_out_qtl = annotate_from_csv(data_dict, gene_list)
+			absent_genes, present_genes = segregate_gene_list(data_dict, gene_list)
+
+
+			print "number of genes in gene_list = %d" %len(gene_list)
+			print "number of genes in data_dict =", (len(data_dict) - len(gene_list))	
 			
-			print "genes in qtl", len(gene_inside_qtl_dict)
-			print "genes out qtl", len(gene_outside_qtl_dict)
+			gene_inside_qtl_dict, gene_outside_qtl_dict, tot_in_qtl, tot_out_qtl = annotate_from_csv(data_dict, present_genes)
+			print "missings = %d" % len(absent_genes)
+			
+			print "number of genes in qtl = %d and %d" %(len(gene_inside_qtl_dict), len(present_genes))
+			print "number of genes out qtl =", len(gene_outside_qtl_dict)
 		
-			golist_unique = unique_GO_list(gene_inside_qtl_dict)
+			golist_unique = unique_GO_list(gene_inside_qtl_dict)	
 			
-			miss = count_missings(data_dict, gene_list)
-			print "%d genes from gene_list were not found in data_dict" % miss
-			
+
+			##############################################################
+			##############################################################		
+
+
+			#Count all genes with and without GO annotations
+			#Count all genes inside and outside the QTLs
 			
 			#Prepare for counted genes inside qtl:
 			golist_array_in = make_go_array(gene_inside_qtl_dict)
@@ -1275,25 +1448,11 @@ def SearchTraitView(request):
 			golist_out = flatten_array(golist_array_out)
 			c_go_out_qtl_dict = count_all_goterms(golist_out)
 			
-			
-			##############################################################
-			##############################################################
-			##############################################################		
-			#Create a contingency table for the Fishers exact test
-			#Count all genes with and without GO annotations
-			#Count all genes inside and outside the QTLs
-			
+			#Create contingency tables for the Fishers exact test						
 			tic = time.clock()
-			c_array = populate_contingency_table(c_go_in_qtl_dict, c_go_out_qtl_dict, golist_unique, tot_in_qtl, tot_out_qtl)
+			c_array, total_genes = populate_contingency_table(c_go_in_qtl_dict, c_go_out_qtl_dict, golist_unique, tot_in_qtl, tot_out_qtl)
 			toc = time.clock()
 			print "Time to make contingency table is %f seconds" % (toc-tic)			
-			
-			#tic = time.clock()
-			#c_array = make_yesno_list(golist, gene_inside_qtl_dict, gene_outside_qtl_dict)
-			#toc = time.clock()
-			#print "Time to make contingency table is %f seconds" % (toc-tic)
-
-
 			
 				
 				
@@ -1325,26 +1484,40 @@ def SearchTraitView(request):
 			print "Time to approve enrichment A is %f seconds" % (toc-tic)
 			
 			
+			#gene_list_for_specific_go = get_gene_with_go_from_qtl(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict)
+			
+			
 			#B
 			tic = time.clock()
-			approved_golistB = post_process_B(approved_golistA, gene_inside_qtl_dict)
+			godict_full, godict_reduced = post_process_B(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict)
 			toc = time.clock()
 			print "Time to approve enrichment B is %f seconds" % (toc-tic)
+			print "length of godict = %d" %len(godict_full)
+			
+			
 			
 			#GO links:
-			golink_dict = GO_link_creator(approved_golistB)
+			link_for_trait = gene_link_creator(trait_name)
 			
 			
-			c_array_display = lets_see_tables(c_array)
+			#go_gene_link_dict = link_the_linked_links2(godict_reduced)
+			
+			qtl_gogenes_dict = get_genes_with_go_from_qtl(gene_dict, godict_reduced)
+			
+			go_genes_qtl_dict = link_the_linked_links(gene_dict, godict_reduced)
+			
+			
+			
+			#c_array_display = lets_see_tables(c_array)
+			
+			
+
 					
 			stats_dict = {
-						"trait_name" : trait_name,
+						"link_for_trait" : link_for_trait,
 						"cutoff_name" : cutoff_name,
-						"gene_dict" : gene_dict,
-						#"enriched_golist" : enriched_golist,
-						"approved_golistB" : approved_golistB,
-						"golink_dict" : golink_dict, 
-						"c_array_display" : c_array_display,
+						"qtl_gogenes_dict" : qtl_gogenes_dict,
+						"go_genes_qtl_dict" : go_genes_qtl_dict,
 						}
 			
 			
@@ -1354,16 +1527,16 @@ def SearchTraitView(request):
 
 			
 			#return display_meta(request)
-			return render_to_response("wouter/get_go.html", stats_dict)
+			return render_to_response("wouter/display_individual_trait.html", stats_dict)
 
 		
 	else:
-		return render_to_response('wouter/search_trait.html')
+		return render_to_response('wouter/search_individual_trait.html')
 
 
 
 
-def CheckTraitView(request):
+def MultipleTraitView(request):
 	"""
 	This view will display the amount of found qtl and GO enrichments
 	for each trait for a given cutoff value
@@ -1429,18 +1602,20 @@ def CheckTraitView(request):
 
 		toc = time.clock()
 		print "Time to perform trait check is %f seconds" % (toc-tic)
-	
+		
+		
+		
 		stats_dict = {
 					"cutoff_name" : cutoff_name,
 					"combined_stats" : combined_stats
 					}
 	
 	
-		return render_to_response("wouter/get_trait_stats.html", stats_dict)
+		return render_to_response("wouter/display_multiple_traits.html", stats_dict)
 	
 	
 	else:
-		return render_to_response("wouter/check_trait.html")
+		return render_to_response("wouter/search_multiple_trait.html")
 
 
 
@@ -1448,6 +1623,57 @@ def CheckTraitView(request):
 
 
 
+
+
+def Graphview(request):
+	"""
+	A graph of the LOD scores versus the markers
+	
+	"""
+	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
+		
+		trait_name_u = request.GET.get('trait_name')
+		trait_name = trait_name_u.encode("utf-8")
+	
+		cutoff_name_D = request.GET.get('cutoff_name')
+		cutoff_name = float(cutoff_name_D)
+		gxe_boolean = False
+		data = marker_logp_list(trait_name, gxe_boolean)
+		
+		#labels = [str(i[1]) for i in data]
+		x = [int(i[0]) for i in data]
+		y = [float(i[2]) for i in data]
+		
+		fig = Figure(figsize = (10,10))
+		axis = fig.add_subplot(1,1,1)
+		axis.set_title("LOD scores for trait %s with cutoff %0.3f" %(trait_name, cutoff_name))
+		axis.set_xlabel("Marker")
+		axis.set_ylabel("LOD")
+		axis.grid(True)
+		axis.axhline(0)
+		axis.axhline(cutoff_name, color = 'r')
+		axis.axhline(-cutoff_name, color = 'r')
+		axis.autoscale(enable = True)
+		axis.plot(x, y)
+		
+	
+		canvas = FigureCanvas(fig)
+		#imgData = StringIO.StringIO()
+		#canvas.print_png(imgData)
+		
+		#return HttpResponse(imgData.getvalue(), mimetype = 'image/png')
+		
+		response = HttpResponse(mimetype = 'image/png')
+		canvas.print_png(response)
+		return response
+		
+
+	else:
+		return render_to_response("wouter/search_graph_trait.html")
+	
+
+
+# AT1G03530
 ###############################################################################
 
 
@@ -1472,7 +1698,7 @@ def display_meta(request):
 ###############################################################################
 		
 
-def SearchTraitView2(request):
+def OutputDataView(request):
 	"""
 	When a trait and a cutoff value are given on the website, these values
 	are retrieved from the database and fed to this view. 
@@ -1487,6 +1713,8 @@ def SearchTraitView2(request):
 	#normale gene expression
 	#checked means 'gxe' is in request.GET and thus we will go for 
 	#environmental permutation
+
+		
 	if 'gxe' in request.GET:
 		gxe_boolean = True
 	if 'gxe' not in request.GET:
@@ -1494,6 +1722,7 @@ def SearchTraitView2(request):
 		
 	#The values 'trait_name' and 'cutoff_name' are given in the template
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
+		
 		
 		tic_t = time.clock() # starting point of total process
 		tic = time.clock() # starting point of genelist retrieval
@@ -1503,16 +1732,18 @@ def SearchTraitView2(request):
 	
 		cutoff_name_D = request.GET.get('cutoff_name')
 		cutoff_name = float(cutoff_name_D)
-	
+
+		trait_function = get_trait_description(trait_name)		
+
 		l1 = marker_logp_list(trait_name, gxe_boolean)
 		l2 = add_chromosome_and_position(l1)
 		l3 = retrieve_logp_above_cutoff(l2, cutoff_name)
-		
+
 		#If no markers are found above the chosen cutoff, than display this message
-		if l3 == None:
+		if len(l3) == 0:
 			message = "There are no markers with a LOD score higher than %f for trait %s" % (cutoff_name, trait_name)
 			bottle = {"message" : message}
-			return render_to_response("wouter/no_go.html", bottle)
+			return render_to_response("wouter/display_individual_trait.html", bottle)
 		
 		else:
 		
@@ -1530,18 +1761,21 @@ def SearchTraitView2(request):
 			
 			#this function uses the function 
 			#normalize_object_data
-			l8 = find_genes_in_regions(l7)
+			gene_dict = find_genes_in_regions(l7)
 			
-			l9 = read_distinct_genes(l8)
+			gene_list = read_distinct_genes(gene_dict)
 			
-			#Place the output into a dictionary
-			#Give each key the same name as the variable for convenience
-			#The dictionary will be passed to the template
-			#Inside the template the key's are used to display the
-			#corresponding values
 			
-			toc = time.clock()
-			print "Time to retrieve a gene list is %f seconds" % (toc-tic)
+			
+			######################
+			markers = Marker.objects.values_list('marker_name',flat=True).order_by('marker_chromosome','marker_cm')
+			cm_data = []
+			for marker in markers:
+		
+				cm_m = Marker.objects.get(marker_name = marker).marker_cm
+				cm_data.append(cm_m)
+				
+			######################
 			
 			
 			
@@ -1553,17 +1787,18 @@ def SearchTraitView2(request):
 						"l4" : l4,
 						"l5" : l5,
 						"l6" : l6,
-						"l8" : l8,
-						"l9" : l9,
+						"gene_dict" : gene_dict,
+						"gene_list" : gene_list,
+						"cm_data" : cm_data,
 						}
 
 
 
-			return render_to_response("wouter/gene_list.html", gene_dict)
+			return render_to_response("wouter/display_output_data.html", gene_dict)
 
 		
 	else:
-		return render_to_response('wouter/search_trait.html')
+		return render_to_response('wouter/search_individual_trait.html')
 		
 		
 		
