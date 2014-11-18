@@ -20,6 +20,8 @@ import StringIO
 from django.shortcuts import render_to_response
 from django.template import RequestContext, loader
 from django.http import HttpResponse
+from django.template.response import TemplateResponse
+from django.core.urlresolvers import reverse
 
 from .models import Gene,Marker,LOD
 
@@ -1059,7 +1061,7 @@ def make_qtl_go_dict(gene_in_qtl_dict, qtl_gene_dict):
 				
 
 
-def post_process_A(enriched_golist, qtl_go_dict):
+def post_process_A(enriched_golist, qtl_go_dict, valA):
 	"""
 	Check for each GO term if it is present in the QTLs
 	gene function must be present in more than 50% of the QTL regions of a trait
@@ -1084,7 +1086,10 @@ def post_process_A(enriched_golist, qtl_go_dict):
 		
 		go_fraction_score = round(is_go_in_qtl_count / total_qtl, 7)
 		
-		if go_fraction_score >= 0.5:
+		
+		#valA can be given on the website
+		#If no value was given, valA will be 0.5
+		if go_fraction_score >= valA:
 			
 			go_info.append(go_fraction_score)
 			approved_golist_A.append(go_info)
@@ -1095,7 +1100,7 @@ def post_process_A(enriched_golist, qtl_go_dict):
 
 
 
-def post_process_B(approved_golist_A, gene_in_qtl_dict, gene_out_qtl_dict):
+def post_process_B(approved_golist_A, gene_in_qtl_dict, gene_out_qtl_dict, valB):
 	"""
 	(B)gene functions must not be predicted for more than 1% of all genes
 	
@@ -1136,8 +1141,9 @@ def post_process_B(approved_golist_A, gene_in_qtl_dict, gene_out_qtl_dict):
 				
 		go_fraction_score = round(go_count / total_number_genes, 7)
 
-		
-		if go_fraction_score <= 0.01:
+		#valB can be given on the website
+		#If no value was given, valB will be 0.01		
+		if go_fraction_score <= valB:
 
 			go_info.append(go_fraction_score)
 			go_info_tuple = tuple(go_info)
@@ -1334,6 +1340,8 @@ def SearchTraitView(request):
 	The tic-toc was added to ascertain how long a search takes
 	"""
 	
+	tic_t = time.clock() # starting point of total process
+	
 	#The template will show a checkbox, default will be unchecked
 	#unchecked means 'gxe' is not in request.GET and thus we will go for
 	#normale gene expression
@@ -1348,7 +1356,27 @@ def SearchTraitView(request):
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
 		
-		tic_t = time.clock() # starting point of total process
+		#Next check if there are any values given for the post processing
+		#If yes then use those values
+		#If not then set them to the default values
+		try:
+			postA_name_u = request.GET.get("postA_name")
+			postA_name = float(postA_name_u)
+			
+		except:
+			#default value:
+			postA_name = 0.5
+			
+		try:
+			postB_name_u = request.GET.get("postB_name")
+			postB_name = float(postB_name_u)
+			
+		except:
+			#default value:
+			postB_name = 0.01
+		
+		
+		
 		tic = time.clock() # starting point of genelist retrieval
 	
 		trait_name_u = request.GET.get('trait_name')
@@ -1476,10 +1504,11 @@ def SearchTraitView(request):
 			#Post processing
 			qtl_go_dict = make_qtl_go_dict(gene_inside_qtl_dict, gene_dict)
 			
+			
 
 			#A
 			tic = time.clock()
-			approved_golistA = post_process_A(enriched_golist, qtl_go_dict)
+			approved_golistA = post_process_A(enriched_golist, qtl_go_dict, postA_name)
 			toc = time.clock()
 			print "Time to approve enrichment A is %f seconds" % (toc-tic)
 			
@@ -1489,7 +1518,7 @@ def SearchTraitView(request):
 			
 			#B
 			tic = time.clock()
-			godict_full, godict_reduced = post_process_B(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict)
+			godict_full, godict_reduced = post_process_B(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict, postB_name)
 			toc = time.clock()
 			print "Time to approve enrichment B is %f seconds" % (toc-tic)
 			print "length of godict = %d" %len(godict_full)
@@ -1511,10 +1540,18 @@ def SearchTraitView(request):
 			#c_array_display = lets_see_tables(c_array)
 			
 			
+			#Create url for GraphView
+			Graph_url_base = request.build_absolute_uri(reverse('display_graph'))
+			Graph_url_data = "?trait_name=%s&cutoff_name=%f" %(trait_name, cutoff_name)
+			
+			Graph_url = Graph_url_base + Graph_url_data
+			
 
+			
 					
 			stats_dict = {
 						"link_for_trait" : link_for_trait,
+						"Graph_url" : Graph_url,
 						"cutoff_name" : cutoff_name,
 						"qtl_gogenes_dict" : qtl_gogenes_dict,
 						"go_genes_qtl_dict" : go_genes_qtl_dict,
@@ -1610,16 +1647,12 @@ def MultipleTraitView(request):
 					"combined_stats" : combined_stats
 					}
 	
-	
+		
 		return render_to_response("wouter/display_multiple_traits.html", stats_dict)
 	
 	
 	else:
 		return render_to_response("wouter/search_multiple_trait.html")
-
-
-
-
 
 
 
@@ -1644,7 +1677,7 @@ def Graphview(request):
 		x = [int(i[0]) for i in data]
 		y = [float(i[2]) for i in data]
 		
-		fig = Figure(figsize = (10,10))
+		fig = Figure(figsize = (15,5))
 		axis = fig.add_subplot(1,1,1)
 		axis.set_title("LOD scores for trait %s with cutoff %0.3f" %(trait_name, cutoff_name))
 		axis.set_xlabel("Marker")
@@ -1664,9 +1697,9 @@ def Graphview(request):
 		#return HttpResponse(imgData.getvalue(), mimetype = 'image/png')
 		
 		response = HttpResponse(mimetype = 'image/png')
-		canvas.print_png(response)
+		graph = canvas.print_png(response)
 		return response
-		
+			
 
 	else:
 		return render_to_response("wouter/search_graph_trait.html")
