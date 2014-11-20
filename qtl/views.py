@@ -9,22 +9,17 @@ import rpy2.robjects as ro
 import numpy as np
 import scipy
 from scipy import stats
-from matplotlib import pylab
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
-from pylab import *
 import PIL #Python Imaging Library
 from PIL import Image
 import StringIO
 
 from django.shortcuts import render_to_response
-from django.template import RequestContext, loader
 from django.http import HttpResponse
-from django.template.response import TemplateResponse
 from django.core.urlresolvers import reverse
 
 from .models import Gene,Marker,LOD
-
 
 
 
@@ -42,7 +37,8 @@ def marker_logp_list(trait, gxe_boolean):
 	chromosomes and their genetic mapping in centiMorgan.
 	 
 	The list is enumerated, meaning that an integer is added to
-	the tuple. The integer ranges from 0 to len(pair_list)-1
+	the tuple. 
+	
 	The enumeration will eventually help to identify marker regions
 	in the check_if_markers_consecutive function
 	'''
@@ -78,16 +74,6 @@ def marker_logp_list(trait, gxe_boolean):
 	        
 		except LOD.DoesNotExist:
 			pass
-			#logp3 = None
-
-
-	#checked_tuple_list = []
-	#for tup in tuple_list:
-		
-		#if tup[2] equals to None then the gene name does not exist in the database
-		#there for it cannot be used fo further manipulation
-		#if tup[2] != None:
-			#checked_tuple_list.append(tup)
 	
 	
 	return tuple_list
@@ -146,6 +132,8 @@ def retrieve_logp_above_cutoff(tuple_list, cutoff):
 	'''
 	Take all the Markers and -logp values above a certain value,
 	(Usually a cutoff of 2.3 is seen as significant)
+	
+	The cutoff is given as input in the app
 	'''
 
 	cutoff_list = []
@@ -155,11 +143,9 @@ def retrieve_logp_above_cutoff(tuple_list, cutoff):
 		
 		
 		#Use abs() because there are negative -logp values present
-		#The minus signs were added to indicate the differential
-		#expression from the other allel
+		#The minus signs were added to discriminate between the parent alleles
 		# + indicates Bay and - indicates Sha
-		if abs(info_tuple[2]) >= cutoff:
-			
+		if abs(info_tuple[2]) >= cutoff:		
 				
 			cutoff_list.append(info_tuple)
 		else:
@@ -244,12 +230,14 @@ def check_region(cutoff_list):
 
 def iterate_marker_tuple(marker_region_list):
 	"""
-   Iterate over a list containing lists with either one or more
-   tuples. 
-   A single tuple will be identified as the maximum in the group.
-   A list of 2 or more tuples will be fed to the function 
-   highest_tuple. 
-   """
+	Iterate over a list containing lists with either one or more
+	tuples. 
+	
+	Also a single tuple is sent, however, it will be identified quickly
+	as the maximum in the group.(Considering its the only one!)
+	
+	A list of 2 or more tuples will be fed to the function highest_tuple. 
+	"""
     
 	maximum_markers = []
     
@@ -396,6 +384,7 @@ def get_chromosome_max(marker_tuple):
 	"""
 	The tuple being fed is always from the last marker on any
 	given chromosome.
+	
     Get the highest physical position on the chromosome to act as
     the highest region border
     """
@@ -459,7 +448,8 @@ def check_regions_on_chromosome(region_start, region_end, marker_list):
 			#The region start should be on the same chromosome as the
 			#region end.
 			#The None values should not matter, this new tuple only has
-			#a physical position on a chromosome
+			#a physical position on a chromosome and is not related to
+			#any marker and thus does not have a LOD score
 			corr_start = (None, None, None, region_end[3], 0)
 			corr_end = region_end
 			return corr_start, corr_end
@@ -500,8 +490,9 @@ def find_genes_in_regions(region_list):
 	(trait, chromosome number, marker start position, marker end position)
 	
 	This information is used to collect lists of genes that are positioned
-	on each region.
+	on each region.(between the 2 physical start and end positions)
 	[gene name, gene start, gene end]
+	
 	The tuple and gene lists will be placed together in a dictionary with
 	the tuple as key and the list as value
 	"""
@@ -512,18 +503,22 @@ def find_genes_in_regions(region_list):
 	
 	for region in region_list:
 		#Only look at the genes on a specific chromosome
+		#The chromosome number is indicated on region[1]
 		chromosome_spec_list = complete_gene_list.filter(chromosome = region[1])
-		#Exclude all genes with basepair locations below the first marker
+		#Exclude all genes with a physical location in front of the start 
+		#position
 		remove_genes_ahead = chromosome_spec_list.exclude(start__lt = region[2])
-		#Exclude all genes with basepair locations above the last marker
+		#Exclude all genes with a physical location behind the end
+		#position
 		remove_genes_behind = remove_genes_ahead.exclude(end__gt = region[3])
 		
-		#normalize the database data
-		normal_list = normalize_object_data(remove_genes_behind)
+		#normalize the database data, meaning that we use the data as
+		#basic python types instead of the django class types
+		normal_gene_list = normalize_object_data(remove_genes_behind)
 		
 		#add each region and list of genes to the dictionary gene_dict
 		#with the tuple as a key and the gene list as a value
-		gene_dict[region] = normal_list
+		gene_dict[region] = normal_gene_list
 		
 	return gene_dict
 	
@@ -541,12 +536,12 @@ def normalize_object_data(data_list):
 	[gene name, gene start, gene end]
 	With normalized data types
 	"""	
-	normal_list = []
+	normal_gene_list = []
 	
 	for data in data_list:
-		normal_list.append([data[0].encode("utf-8"), int(data[2]), int(data[3])])
+		normal_gene_list.append([data[0].encode("utf-8"), int(data[2]), int(data[3])])
 	
-	return normal_list
+	return normal_gene_list
 
 
 ###############################################################################
@@ -555,10 +550,7 @@ def normalize_object_data(data_list):
 
 def read_distinct_genes(genedict):
 	"""
-	This function gives all found genes from all regions an annotation
-	using the GO annotations from a file.
 	All genes from all regions will be placed in one big list.
-	The ..
 	"""
 	
 	#read all the genes from the found regions into a new list
@@ -576,14 +568,6 @@ def read_distinct_genes(genedict):
 			
 	return gene_list
 
-###############################################################################
-############################Implement##########################################
-########################AaltJan's##scripts#####################################
-###############################################################################
-#############################-EDIT#############################################
-###################AaltJan's#scripts###has been################################
-###########################################replaced############################
-###############################################################################
 
 
 
@@ -596,9 +580,7 @@ def read_once_csv(filename):
 	The rest of the row holds the GO annotations
 	"""
 	
-	tic = time.clock()
 	
-	#data = genfromtxt(filename, delimiter = ',')
 	data_dict = {}
 	
 	with open(filename, 'rb') as csvobject:
@@ -611,25 +593,27 @@ def read_once_csv(filename):
 			value = row[1:]
 			
 			data_dict[key] = value
-		
 	
-	toc = time.clock()
-	stopwatch = toc-tic
 	
-	return data_dict, stopwatch
+	return data_dict
 
 
 
 def segregate_gene_list(data_dict, gene_list):
 	"""
-	Take a dictionary, containing all the genes for which 1 or more GO terms
-	are known, derived from a csv file. And take a list of genes that were 
-	located within the identified QTL regions.
+	Take a dictionary, containing all the genes for which 1 or more GO
+	terms are known, derived from a csv file.
+	
+	And take a list of genes that were located within the identified QTL 
+	regions.
 	
 	Using pythons set() mechanics segregate the list of genes into 2 new
 	lists of genes:
 	1: a list of genes present in the data file
 	2: a list of genes absent in the data file
+	
+	If some genes are not mentioned in the csv file, there is no point in
+	using them anymore. This will make further processes shorter/faster
 	"""
 
 	
@@ -656,8 +640,8 @@ def annotate_from_csv(data_dict, gene_list):
 	"""
 	
 	#Create two new dictionaries; 
-	# one for all the genes inside the found QTL's
-	# other one for all the genes outside the found QTL's
+	# 1: for all the genes inside the found QTL's
+	# 2: for all the genes outside the found QTL's
 	gene_inside_qtl_dict = {}
 	gene_outside_qtl_dict = {}
 	
@@ -672,7 +656,7 @@ def annotate_from_csv(data_dict, gene_list):
 			#then add that gene as key to the new dict with 
 			#corresponding value
 			#the value is already a list of go annotations that are
-			#linked to that gene
+			#predicted for that gene
 			gene_inside_qtl_dict[gene] = data_dict[gene]
 		
 		if gene not in gene_list:
@@ -680,6 +664,8 @@ def annotate_from_csv(data_dict, gene_list):
 			#If the gene is not inside the QTL's then it must be outside
 			gene_outside_qtl_dict[gene] = data_dict[gene]
 	
+	#Calculate the totals here so that they can be used to populate
+	#The contingency tables very fast
 	tot_in_qtl = len(gene_inside_qtl_dict)
 	tot_out_qtl = len(gene_outside_qtl_dict)
 
@@ -690,9 +676,7 @@ def annotate_from_csv(data_dict, gene_list):
 def unique_GO_list(gene_in_qtl_dict):
 	"""
 	Gene_dict contains a gene name for each key
-	The values are lists of go terms for each gene
-	Inside the QTL
-	
+	The values are lists of go terms for each gene inside the QTL
 	
 	Extract the go terms from the dictionary values
 	And create a list of unique go terms
@@ -762,6 +746,10 @@ def lets_see_tables(yesno_list):
 def make_go_array(gene_in_qtl_dict):
 	"""
 	Make go_array from dict values
+	The values are lists of go terms
+	
+	Note that individual GO terms can be present in the list multiple 
+	times. This is exactly the point
 	"""
 
 	go_array = []
@@ -778,7 +766,7 @@ def make_go_array(gene_in_qtl_dict):
 
 def flatten_array(go_array):
 	"""
-	Flatten one level of nesting
+	Flatten one level of nesting so that an array becomes a list
 	"""
 
 	flattened_list = []
@@ -788,13 +776,17 @@ def flatten_array(go_array):
 			
 			flattened_list.append(go)
 
-	
 	return flattened_list
 	
 	
 def count_all_goterms(go_list):
 	"""
 	Count all go terms in the list in one swift subroutine
+	The Counter() function comes from pythons collections module
+	
+	It counts all values in a list and spits out a dictionary with
+	(unique) values from the list as keys and the number of times they
+	appear in the list as values
 	"""
 
 	counted_go_dict = Counter(go_list)
@@ -821,18 +813,18 @@ def populate_contingency_table(go_in_qtl_dict, go_out_qtl_dict, golist, total_in
 	
 	c_table layout:
 	
-				QTL			noQTL
-			_________________________	
-	GO		|	n11		|	n12		|
-	noGO	|	n21		|	n22		|
-	total	|	n31		|	n32		|	n33
-			|___________|___________|		
+			QTL			noQTL
+			________________________________	
+	GO		|	n11		|	n12		|		|
+	noGO	|	n21		|	n22		|		|
+	total	|	n31		|	n32		|	n33	|
+			|___________|___________|_______|		
 	
 	"""
 	
 	c_array = []
 
-	
+	#The marginal totals that are the same for every contingency table
 	n31 = total_in_qtl
 	n32 = total_out_qtl
 	n33 = n31 + n32
@@ -841,6 +833,9 @@ def populate_contingency_table(go_in_qtl_dict, go_out_qtl_dict, golist, total_in
 		
 		if go in go_in_qtl_dict and go in go_out_qtl_dict:
 			
+			#Thanks to the known marginal totals we can abuse the degrees
+			#of freedom; Once n11 and n12 are known, a simple reduction
+			#will tell us the values of n21 and n22
 			n11 = go_in_qtl_dict[go]
 			n12 = go_out_qtl_dict[go]
 			n21 = n31 - n11
@@ -871,15 +866,12 @@ def fish_for_python(data):
 	The speed of doing the fishers exact test was compared in scipy and 
 	imported R objects. It was found that the test in scipy gave the same results
 	but at 10 times the speed.
-	
-	Takes the output of make_yesno_list. For the datastructure of input
-	see DOC string of make_yesno_list
-	
-	The data is fed to robjects using the rpy2 package
-	The fisher test is performed for each go term.
+
+	The fisher test is performed on each contingeny table
+	Each contingency table is a measurement for a single go term.
 	
 	The output is a go term and the corresponding calculated p-values for
-	both alternative hypothesis
+	both alternative hypothesis (Even though we only care about the RPV)
 	
 	##################################################
 	
@@ -931,14 +923,12 @@ def fish_for_python(data):
 		c_table = [[info[1], info[2]], [info[3], info[4]]]
 		
 		#perform two alternative fisher exact test
-		fl_oddsratio, fl_pvalue = stats.fisher_exact(c_table, alternative='less')
 		fu_oddsratio, fu_pvalue = stats.fisher_exact(c_table, alternative='greater')
 		
 		#Round the p values to 7 decimals
-		fl_pvalue2 = round(fl_pvalue, 7)
 		fu_pvalue2 = round(fu_pvalue, 7)
 		
-		individual_fisher_score = [i, go, fl_pvalue2, fu_pvalue2]
+		individual_fisher_score = [i, go, fu_pvalue2]
 		
 		fisher_output.append(individual_fisher_score)
 		
@@ -954,14 +944,14 @@ def fish_for_python(data):
 def extract_significant_result(fisher_input, alpha):
 	"""
 	Only allow the results with a pvalue equal or below alpha to be returned
+	Because those are to be considered significant results
 	"""
 	
 	significant_output = []
 	
-	#info = [i, go, fl_pvalue, fu_pvalue]
+	#info = [i, go, fu_pvalue]
 	for info in fisher_input:
-		
-		if info[3] <= alpha:
+		if info[2] <= alpha:
 			
 		
 			significant_output.append(info)
@@ -978,12 +968,15 @@ def extract_significant_result(fisher_input, alpha):
 
 def multiple_test(data):
 	"""
-	input = [i, go, fl_p_value[0], fu_p_value[0]]
+	Finaly we need R's help to perform some statistics..
+	But hopefully not for too long ;)
 	
-	The p.adjust method is done on the pvalue of the fisher test with the
-	greater than alternative, since this value is more relevant.
+	input = [i, go, fu_p_value[0]]
 	
-	output = [i, go, fl_p_value[0], fu_p_value[0], adjusted(fu_p_value[0]) ]
+	The p.adjust method is done on the RPV's of the fisher test, 
+	since this value is more relevant.
+	
+	output = [i, go, fu_p_value[0], adjusted(fu_p_value[0]) ]
 	
 	The multiple testing procedure with the Benjamini/Hochberg method is
 	not yet viable in scipy, therefor it is done through imported R functions. 
@@ -995,7 +988,7 @@ def multiple_test(data):
 	#store all the p values derived from the "greater" alternative fisher test
 	#in a new list
 	for info in data:
-		fu_p_value_list.append(info[3])
+		fu_p_value_list.append(info[2])
 	
 	#transform the list into vector so that R also understands whats
 	#going on
@@ -1010,7 +1003,7 @@ def multiple_test(data):
 	for i in range(0, len(data)):
 		
 		Rdata = Rround(cor_data[i], digits = 7)
-		individual_adjusted = [data[i][0], data[i][1], data[i][2] ,data[i][3], Rdata[0]]
+		individual_adjusted = [data[i][0], data[i][1], data[i][2] , Rdata[0]]
 		
 		adjusted_output.append(individual_adjusted)
 		
@@ -1329,7 +1322,9 @@ def BaseView(request):
 	"""
 	return render_to_response('wbase.html')
 
-	
+
+
+
 def SearchTraitView(request):
 	"""
 	When a trait and a cutoff value are given on the website, these values
@@ -1356,11 +1351,20 @@ def SearchTraitView(request):
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
 		
+		try:
+			fisher_alpha_name_u = request.GET.get("fisher_alpha_name").strip()
+			fisher_alpha_name = float(fisher_alpha_name_u)
+			
+		except:
+			#default value:
+			fisher_alpha_name = 0.05
+		
+		
 		#Next check if there are any values given for the post processing
 		#If yes then use those values
 		#If not then set them to the default values
 		try:
-			postA_name_u = request.GET.get("postA_name")
+			postA_name_u = request.GET.get("postA_name").strip()
 			postA_name = float(postA_name_u)
 			
 		except:
@@ -1368,7 +1372,7 @@ def SearchTraitView(request):
 			postA_name = 0.5
 			
 		try:
-			postB_name_u = request.GET.get("postB_name")
+			postB_name_u = request.GET.get("postB_name").strip()
 			postB_name = float(postB_name_u)
 			
 		except:
@@ -1379,10 +1383,10 @@ def SearchTraitView(request):
 		
 		tic = time.clock() # starting point of genelist retrieval
 	
-		trait_name_u = request.GET.get('trait_name')
+		trait_name_u = request.GET.get('trait_name').strip()
 		trait_name = trait_name_u.encode("utf-8")
 	
-		cutoff_name_D = request.GET.get('cutoff_name')
+		cutoff_name_D = request.GET.get('cutoff_name').strip()
 		cutoff_name = float(cutoff_name_D)
 
 		trait_function = get_trait_description(trait_name)		
@@ -1441,7 +1445,7 @@ def SearchTraitView(request):
 			file_path = os.path.join(module_dir, 'documents', filename)
 			
 			#read the rows from the csv file mentioned above in filename
-			data_dict, timed_read = read_once_csv(file_path)
+			data_dict = read_once_csv(file_path)
 			
 			absent_genes, present_genes = segregate_gene_list(data_dict, gene_list)
 
@@ -1494,9 +1498,10 @@ def SearchTraitView(request):
 			#tables
 			fisher_python = fish_for_python(c_array)
 			
-			#only allow the results with p values below alpha to pass
-			alpha = 0.05
-			significant_info = extract_significant_result(fisher_python, alpha)
+			#only allow the results with p values below fisher_alpha to pass
+			#fisher_alpha default is 0.05 unless another value is given
+			#front end
+			significant_info = extract_significant_result(fisher_python, fisher_alpha_name)
 			
 			#perform a multiple test
 			enriched_golist = multiple_test(significant_info)
@@ -1663,6 +1668,7 @@ def Graphview(request):
 	A graph of the LOD scores versus the markers
 	
 	"""
+	tic = time.clock()
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
 		trait_name_u = request.GET.get('trait_name')
@@ -1679,25 +1685,28 @@ def Graphview(request):
 		
 		fig = Figure(figsize = (15,5))
 		axis = fig.add_subplot(1,1,1)
-		axis.set_title("LOD scores for trait %s with cutoff %0.3f" %(trait_name, cutoff_name))
+		axis.set_title("LOD scores for trait %s with cutoff %s" %(trait_name, cutoff_name))
 		axis.set_xlabel("Marker")
 		axis.set_ylabel("LOD")
 		axis.grid(True)
-		axis.axhline(0)
+		axis.axhline(0, color = 'k')
 		axis.axhline(cutoff_name, color = 'r')
 		axis.axhline(-cutoff_name, color = 'r')
 		axis.autoscale(enable = True)
 		axis.plot(x, y)
 		
-	
 		canvas = FigureCanvas(fig)
-		#imgData = StringIO.StringIO()
-		#canvas.print_png(imgData)
 		
-		#return HttpResponse(imgData.getvalue(), mimetype = 'image/png')
+		imgData = StringIO.StringIO()
+		canvas.print_png(imgData)
+		response = HttpResponse(imgData.getvalue(), mimetype = 'image/png')
 		
-		response = HttpResponse(mimetype = 'image/png')
-		graph = canvas.print_png(response)
+		#response = HttpResponse(mimetype = 'image/png')
+		#canvas.print_png(response)
+		
+		toc = time.clock()
+
+		print "time for graph construction is %f" %(toc-tic)
 		return response
 			
 
@@ -1705,6 +1714,26 @@ def Graphview(request):
 		return render_to_response("wouter/search_graph_trait.html")
 	
 
+
+
+
+def StoreCsvView(request):
+	"""
+	
+	"""
+	
+	# Create the HttpResponse object with the appropriate CSV header.
+	response = HttpResponse(content_type='text/csv')
+	response['Content-Disposition'] = 'attachment; filename="somefilename.csv"'
+	
+	writer = csv.writer(response)
+	
+	#Iterate through all lists/dictionaries/tuples, anything containing
+	#information to write to the csv file
+	writer.writerow(['First row', 'Foo', 'Bar', 'Baz'])
+	writer.writerow(['Second row', 'A', 'B', 'C', '"Testing"', "Here's a quote"])
+	
+	return response
 
 # AT1G03530
 ###############################################################################
@@ -1756,17 +1785,14 @@ def OutputDataView(request):
 	#The values 'trait_name' and 'cutoff_name' are given in the template
 	if request.GET.get('trait_name') and request.GET.get('cutoff_name'):
 		
-		
-		tic_t = time.clock() # starting point of total process
-		tic = time.clock() # starting point of genelist retrieval
 	
-		trait_name_u = request.GET.get('trait_name')
+		trait_name_u = request.GET.get('trait_name').strip()
 		trait_name = trait_name_u.encode("utf-8")
 	
-		cutoff_name_D = request.GET.get('cutoff_name')
+		cutoff_name_D = request.GET.get('cutoff_name').strip()
 		cutoff_name = float(cutoff_name_D)
-
-		trait_function = get_trait_description(trait_name)		
+	
+		trait_function = get_trait_description(trait_name)
 
 		l1 = marker_logp_list(trait_name, gxe_boolean)
 		l2 = add_chromosome_and_position(l1)
@@ -1790,13 +1816,13 @@ def OutputDataView(request):
 			#get_chromosome_max and check_regions_on_chromosome
 			l6 = set_region_from_adjacent_markers(l5, l2)
 			
-			l7 = combine_marker_region_data(trait_name, l6)
+			#l7 = combine_marker_region_data(trait_name, l6)
 			
 			#this function uses the function 
 			#normalize_object_data
-			gene_dict = find_genes_in_regions(l7)
+			#gene_dict = find_genes_in_regions(l7)
 			
-			gene_list = read_distinct_genes(gene_dict)
+			#gene_list = read_distinct_genes(gene_dict)
 			
 			
 			
@@ -1820,8 +1846,8 @@ def OutputDataView(request):
 						"l4" : l4,
 						"l5" : l5,
 						"l6" : l6,
-						"gene_dict" : gene_dict,
-						"gene_list" : gene_list,
+						#"gene_dict" : gene_dict,
+						#"gene_list" : gene_list,
 						"cm_data" : cm_data,
 						}
 
