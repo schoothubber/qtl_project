@@ -1,0 +1,224 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+
+<head>
+	<style>
+		table, th, td {
+			border: 1px solid black;
+			border-collapse: collapse;
+		}
+		th, td {
+			padding: 2px;
+		}
+	</style>
+</head>
+
+
+<!-- Message in a bottle: If the dictionary "bottle" is passed to this template,
+it will contain a message, this message will be about not finding any Enrichment -->
+{% if message %}
+	
+	{{ message }}
+	
+{% else %}
+
+
+
+
+{% if trait_name and cutoff_name %}
+
+
+<p><b>These are the marker values for trait {{ trait_name }}:</b></p>
+
+{% if l2 %}
+
+<table style="width:100%" bgcolor="WhiteSmoke">
+		
+		<tr>
+			<th>integer</th>
+			<th>Marker</th>		
+			<th>LOD score</th>
+			<th>Chromosome</th>
+			<th>Physical Position</th>
+		</tr>
+		
+		{% for l in l2 %}
+		
+		<tr>
+			<td>{{ l.0 }}</td>
+			<td>{{ l.1 }}</td>
+			<td>{{ l.2 }}</td>		
+			<td>{{ l.3 }}</td>
+			<td>{{ l.4 }}</td>
+		</tr>
+		
+		{% endfor %}
+		
+</table>
+
+{% endif %}
+
+
+
+
+
+
+
+{% if l3 %}
+
+<p><b>These markers have a -log p value above {{ cutoff_name }}:</b></p>
+
+	<table style="width:100%" bgcolor="WhiteSmoke">
+
+			<tr>
+				<th>integer</th>
+				<th>Marker</th>		
+				<th>LOD score</th>
+				<th>Chromosome</th>
+				<th>Physical Position</th>
+			</tr>
+			
+			{% for l in l3 %}
+			
+			<tr>
+				<td>{{ l.0 }}</td>
+				<td>{{ l.1 }}</td>
+				<td>{{ l.2 }}</td>		
+				<td>{{ l.3 }}</td>
+				<td>{{ l.4 }}</td>
+			</tr>
+			
+			{% endfor %}
+			
+	</table>
+
+{% endif %}
+
+
+
+{% if l4 %}
+
+<p><b>The markers have been grouped by direct vicinity and chromosome number:</b></p>
+
+	<table style="width:100%" bgcolor="WhiteSmoke">
+			{% for ll in l4 %}
+			
+
+					<tr>
+						<th>integer</th>
+						<th>Marker</th>		
+						<th>LOD score</th>
+						<th>Chromosome</th>
+						<th>Physical Position</th>
+					</tr>
+			
+				{% for l in ll %}
+			
+					<tr>
+						<td>{{ l.0 }}</td>
+						<td>{{ l.1 }}</td>
+						<td>{{ l.2 }}</td>		
+						<td>{{ l.3 }}</td>
+						<td>{{ l.4 }}</td>
+					</tr>
+					
+				{% endfor %}
+							
+			{% endfor %}
+			
+	</table>
+    
+{% endif %}
+
+
+
+
+
+
+{% if l5 %}
+
+<p><b>For each group of markers the following have the highest -log p value:</b></p>
+
+	<table style="width:100%" bgcolor="WhiteSmoke">
+
+			<tr>
+				<th>integer</th>
+				<th>Marker</th>		
+				<th>LOD score</th>
+				<th>Chromosome</th>
+				<th>Physical Position</th>
+			</tr>
+			
+			{% for l in l5 %}
+			
+			<tr>
+				<td>{{ l.0 }}</td>
+				<td>{{ l.1 }}</td>
+				<td>{{ l.2 }}</td>		
+				<td>{{ l.3 }}</td>
+				<td>{{ l.4 }}</td>
+			</tr>
+			
+			{% endfor %}
+			
+	</table>
+    
+{% endif %}
+
+
+
+{% if l6 %}
+
+<p><b>The following regions are identified:</b></p>
+
+	<table style="width:100%" bgcolor="WhiteSmoke">
+		
+			{% for ll in l6 %}
+			
+
+					<tr>
+						<th>integer</th>
+						<th>Marker</th>		
+						<th>LOD score</th>
+						<th>Chromosome</th>
+						<th>Physical Position</th>
+					</tr>
+			
+				{% for l in ll %}
+			
+					<tr>
+						<td>{{ l.0 }}</td>
+						<td>{{ l.1 }}</td>
+						<td>{{ l.2 }}</td>		
+						<td>{{ l.3 }}</td>
+						<td>{{ l.4 }}</td>
+					</tr>
+					
+				{% endfor %}
+							
+			{% endfor %}
+			
+	</table>
+    
+{% endif %}
+
+
+
+
+
+{% if cm_data %}
+
+	{% for cm in cm_data %}
+		
+		<li>{{ cm }}</li>
+		
+	{% endfor %}
+	
+{% endif %}
+
+
+{% endif %}
+{% endif %}
+{% endblock %}

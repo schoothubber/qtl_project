@@ -1,0 +1,60 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+
+<head>
+<style>
+table, th, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+    text-align:center; 
+    vertical-align:middle;
+}
+th, td {
+    padding: 10 px;
+}
+</style>
+</head>
+
+
+
+The following traits were scanned with cutoff {{ cutoff_name }}
+<br><br>
+
+
+
+{% if combined_stats %}
+
+	<table style="width:50%" bgcolor="WhiteSmoke">
+		
+		<tr>
+			
+			<th>Trait name</th>
+			<th>Number of QTLs</th>		
+			<th>Number of genes</th>
+			
+		</tr>	
+	
+	{% for info in combined_stats %}
+	
+		<tr>
+			
+			<td>{{ info.0 }}</td>
+			<td>{{ info.1 }}</td>		
+			<td>{{ info.2 }}</td>
+
+		</tr>
+
+	{% endfor %}
+	
+	</table>
+	
+
+{% endif %}
+
+
+
+{% endblock %}
+
+

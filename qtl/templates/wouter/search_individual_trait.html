@@ -1,0 +1,51 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+
+
+	
+  	<form action="." method="get"> 
+		
+		<h2>Mandatory input</h2>
+		Enter one trait : <input id="trait_id" name ="trait_name" type="text"/>
+		<br><br>
+		Enter one cutoff : <input id ="cutoff" name ="cutoff_name" type="float" size="10"/>
+		<br><br>
+		
+		<center><input type="submit" id="search_submit" value="Search" /></center>
+		
+		<br>
+		<hr>
+		
+		<h2>Optional input</h2>
+		Uncheck for normal gene expression / 
+		Check for environmental permutation
+		<input  id="set_gxe" name ="gxe" type="checkbox"/>
+		
+		<br><br>
+		
+		For the fisher test use an alpha value of <input id ="fisher_alpha" name ="fisher_alpha_name" type="float" size="5"/>
+		(default = 0.05)
+		
+		<br><br>
+		
+		A gene function must be present in more than <input id ="postA" name ="postA_name" type="float" size="5"/>
+		of the QTL regions of a trait (default = 0.5)
+		
+		<br><br>
+		
+		Gene functions must not be predicted for more than <input id ="postB" name ="postB_name" type="float" size="5"/>
+		 of all genes (default = 0.01)
+		 
+		<br><br>
+		
+		<pre>(NB: Leaving these boxes empty will set those values to default)</pre>
+		
+		<hr>
+		
+		
+	</form>
+	
+
+{% endblock %}

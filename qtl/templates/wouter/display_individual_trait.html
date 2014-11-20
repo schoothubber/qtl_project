@@ -1,0 +1,178 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+
+
+<head>
+	<style>
+		table, th, td {
+			border: 1px solid black;
+			border-collapse: collapse;
+		}
+		th, td {
+			padding: 10px;
+		}
+	</style>
+</head>
+
+<!-- Message in a bottle: If the dictionary "bottle" is passed to this template,
+it will contain a message, this message will be about not finding any Enrichment -->
+{% if message %}
+	
+	{{ message }}
+	
+{% else %}
+<!-- In the possible event there is Enrichment, and thus no bottle, we GO ahead (note the pun)
+with the display of the found enrichment -->
+
+
+
+<!-- Firstly display the trait that was looked for plus the cutoff used.
+Finish with an amazing description of the gene function of said trait -->
+	{% if link_for_trait and cutoff_name %}
+
+		You searched for trait
+		
+			<a href={{ link_for_trait.0 }} target="_blank">{{ link_for_trait.1 }}</a> 
+		
+		with a threshold of {{ cutoff_name }}<br><br>
+		
+		<b>Trait description:</b>
+		<br>
+		{{ link_for_trait.2 }}
+		
+	{% endif %}
+
+
+
+	
+		<!--Display a graph-->
+	{% if Graph_url %}
+		<hr>
+		<img src = {{ Graph_url }} />
+	{% endif %}	
+
+
+<!--Secondly display the QTL regions that were identified -->
+	{% if qtl_gogenes_dict %}
+	<hr>
+	The following QTL's were found:<br>
+	<table style="width:100%" bgcolor="WhiteSmoke">
+		
+		<tr>
+			<th>Chromosome</th>
+			<th>Physical start</th>		
+			<th>Physical end</th>
+			<th>Genes with predicted functions</th>
+		</tr>
+		
+		{% for qtl, genes in qtl_gogenes_dict.items %}
+		
+		<tr>
+			<td>{{ qtl.1 }}</td>
+			<td>{{ qtl.2 }}</td>		
+			<td>{{ qtl.3 }}</td>
+			<td>{% for gene in genes %}
+					{{ gene }} 
+				{% endfor %}
+			</td>
+		</tr>
+		
+		{% endfor %}
+	</table>
+		<hr>
+
+	{% endif %}
+
+
+
+
+{% if go_genes_qtl_dict %}
+
+<p>
+The following GO terms have been linked to genes that were found in the QTLs.<br>
+Scroll down to see which GO term was enriched for which genes and in which QTL 
+the genes were found.
+</p>
+	<ul>
+	{% for go_link in go_genes_qtl_dict %}
+		<li><a href={{ go_link.0 }} target="_blank">{{ go_link.1 }}</a> </li>
+		
+	{% endfor %}
+	</ul>	
+	{% for go_link, gene_array in go_genes_qtl_dict.items %}
+			<table width="100%" bgcolor="WhiteSmoke">
+				<tr>
+					<th>GO term</th>
+					<th>GO Description</th>
+				</tr>
+				
+				<tr>
+					<td><a href={{ go_link.0 }} target="_blank">{{ go_link.1 }}</a></td>
+					<td>For now you have to click the link for a description</td>
+				</tr>
+	
+			{% for gene_list in gene_array %}
+			
+					<tr>
+						<th>Gene</th>
+						<th>Gene Description</th>
+					</tr>
+								
+				{% if gene_list %}
+					
+					{% for genelink, gene, description in gene_list %}
+					
+						<tr>
+							<td><a href={{ genelink }} target="_blank">{{ gene }}</a></td>
+							<td>{{ description }}</td>
+						</tr>	
+					
+					{% endfor %}
+					<br><br>
+					
+
+				
+				{% else %}
+
+					<tr>
+						<td>NA</td>
+						<td>NA</td>
+					</tr>					
+					
+
+				{% endif %}
+			
+			{% endfor %}
+			</table>		
+		
+		
+	{% endfor %}
+	
+{% endif %}
+
+
+
+
+
+<!--	{% if c_array_display %}
+
+		{% for c_table in c_array_display %}
+			
+			{% for row in c_table %}
+				
+				<p>{{ row }}</p>
+			
+			{% endfor %}
+			
+		<p>#############################################</p>
+		{% endfor %}
+		
+	{% endif %}
+
+{% endif %}
+-->
+
+
+{% endblock %}

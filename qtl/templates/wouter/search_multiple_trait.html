@@ -1,0 +1,38 @@
+{% extends 'wbase.html' %}
+
+{% block content %}
+
+<pre>
+Use this page to quickly find out howmany QTL's are found for any given trait.
+The multiple traits can be tested at once.(input is a space delimited list of traits)
+The output will be the number of QTL's and the number of genes for each trait
+</pre>
+<hr>
+
+  	<form action="." method="get">
+		
+		<h2>Mandatory input</h2>
+		Enter a list of traits separated by a space: <input id="trait_id" name ="trait_name" type="text"/>
+		<br><br>
+		Enter a cutoff value: <input id ="cutoff" name ="cutoff_name" type="float"/>
+		<br><br>
+		
+		<center><input type="submit" id="search_submit" value="Search" /></center>
+		
+		<br>
+		<hr>
+		
+		<h2>Optional input</h2>
+		Uncheck for normal gene expression / 
+		Check for environmental permutation
+		<input  id="set_gxe" name ="gxe" type="checkbox"/>
+		
+		<br><br>
+		
+		<hr>
+		
+
+	</form>
+
+
+{% endblock %}
