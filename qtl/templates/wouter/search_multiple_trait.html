@@ -3,9 +3,8 @@
 {% block content %}
 
 <pre>
-Use this page to quickly find out howmany QTL's are found for any given trait.
-The multiple traits can be tested at once.(input is a space delimited list of traits)
-The output will be the number of QTL's and the number of genes for each trait
+Use this page to find out howmany QTL's are found for any given trait.
+The multiple traits can be tested all at once.(input is a space delimited list of traits)
 </pre>
 <hr>
 
@@ -15,6 +14,14 @@ The output will be the number of QTL's and the number of genes for each trait
 		Enter a list of traits separated by a space: <input id="trait_id" name ="trait_name" type="text"/>
 		<br><br>
 		Enter a cutoff value: <input id ="cutoff" name ="cutoff_name" type="float"/>
+		<br><br>
+		
+		<select id = "experiment" name = "experiment_name">
+			{% for exp in exps %}
+				<option value = "{{ exp }}">{{ exp }}</option>
+			{% endfor %}
+		</select>
+		
 		<br><br>
 		
 		<center><input type="submit" id="search_submit" value="Search" /></center>

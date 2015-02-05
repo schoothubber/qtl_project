@@ -11,7 +11,7 @@
 			border-collapse: collapse;
 		}
 		th, td {
-			padding: 10px;
+			padding: 5px;
 		}
 	</style>
 </head>
@@ -22,9 +22,13 @@ it will contain a message, this message will be about not finding any Enrichment
 	
 	{{ message }}
 	
+	<hr>
+	<img src = {{ Graph_url }} />
+	
 {% else %}
 <!-- In the possible event there is Enrichment, and thus no bottle, we GO ahead (note the pun)
 with the display of the found enrichment -->
+
 
 
 
@@ -34,7 +38,7 @@ Finish with an amazing description of the gene function of said trait -->
 
 		You searched for trait
 		
-			<a href={{ link_for_trait.0 }} target="_blank">{{ link_for_trait.1 }}</a> 
+			<a id="top" href={{ link_for_trait.0 }} target="_blank">{{ link_for_trait.1 }}</a> 
 		
 		with a threshold of {{ cutoff_name }}<br><br>
 		
@@ -88,29 +92,59 @@ Finish with an amazing description of the gene function of said trait -->
 
 
 
+
 {% if go_genes_qtl_dict %}
 
 <p>
-The following GO terms have been linked to genes that were found in the QTLs.<br>
-Scroll down to see which GO term was enriched for which genes and in which QTL 
+The following GO terms are enriched for genes that were found in the QTLs.<br>
+Click on a GO term to go down and see for which genes and in which QTL 
 the genes were found.
 </p>
-	<ul>
+		
+	<table width="100%" bgcolor="WhiteSmoke">
+		
+		<tr>
+			<th>GO term</th>
+			<th>GO name</th>
+			<th>q value</th>
+		</tr>
+		
 	{% for go_link in go_genes_qtl_dict %}
-		<li><a href={{ go_link.0 }} target="_blank">{{ go_link.1 }}</a> </li>
+	
+		<tr>
+			<td><a href= #{{ go_link.1 }} target="_top">{{ go_link.1 }}</a></td>
+			<td>{{ go_link.2 }}</td>
+			<td>{{ go_link.4 }}</td>
+		</tr>
+	
+		
 		
 	{% endfor %}
-	</ul>	
+	</table>
+
+
+		<!--Display a DAG-->
+	{% if DAG_url %}
+		<hr>
+		<img src = {{ DAG_url }} />
+	{% endif %}	
+
+
+
+	
+	
+	
 	{% for go_link, gene_array in go_genes_qtl_dict.items %}
 			<table width="100%" bgcolor="WhiteSmoke">
+				<caption><a href= "#top" >go to top</a></caption>
 				<tr>
 					<th>GO term</th>
 					<th>GO Description</th>
 				</tr>
 				
 				<tr>
-					<td><a href={{ go_link.0 }} target="_blank">{{ go_link.1 }}</a></td>
-					<td>For now you have to click the link for a description</td>
+					<td id={{ go_link.1 }}><a href={{ go_link.0 }} target="_blank">{{ go_link.1 }}</a></td>
+					<td>{{ go_link.2 }} : {{ go_link.3 }}</td>
 				</tr>
 	
 			{% for gene_list in gene_array %}
