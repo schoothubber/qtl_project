@@ -12,11 +12,12 @@ compare the F1 scores
 from collections import OrderedDict
 import random
 import time
+import os
 
 import folder_assignments as fa
 from data_handlers import (
 			read_data, parse_AtReg_data, TFloc_pairs_AtRegNet, 
-			parse_verdict
+			parse_verdict, read_seeds, get_trait_samplesize_data
 			)
 			
 from confusion_matrix import (
@@ -24,93 +25,10 @@ from confusion_matrix import (
 			calculate_confusion, print_results
 			)
 
+from process_datapoints import (
+			get_TGTF_from_genelist, count_total_relations, process_enrichment
+			)
 
-
-def get_trait_samplesize_data(data):
-	"""
-	Data was written to:
-	Home/xenv_dj1.6/QTL/validation/validation_numerics/tt_te_combi.txt
-	
-	This is data is to be extracted and will be partitioned based on
-	dataset and cutoff
-	
-	"""
-
-	data_dict = OrderedDict()
-	
-	for line in data:
-		info = line.split()
-		dataset = info[0].strip()
-		cutoff = float(info[1].strip())
-		trait = info[2].strip()
-		sample_size = int(info[3].strip())
-		
-		if (dataset, cutoff) not in data_dict:
-			data_dict[(dataset, cutoff)] = [[trait, sample_size]]
-		else:
-			temp_data = data_dict[(dataset, cutoff)]
-			temp_data.append([trait, sample_size])
-			data_dict[(dataset, cutoff)] = temp_data
-			
-	return data_dict
-
-
-def get_genelist(dataset, cutoff, chromosome):
-	"""
-	Extract data from several files
-	The files are arranged per dataset and cutoff
-	
-	The data consists of traits with a genelist from their eQTL regions
-	"""
-	
-	data = []
-	
-	subfolder = "genelist_%s/"%dataset
-			
-	#Per trait extract the eQTL genelist
-	for chrom in chromosome:
-	
-		if dataset == 'Ligterink_2014_gxe':
-			datset = 'Ligterink_2014'
-
-			filelocation = "%s/%s/genelist_%s/genelist_%s_co%s_chr%s.txt"%(
-																	fa.mr_folder, 
-																	fa.gfolder, datset, 
-																	dataset, cutoff, chrom
-																	)
-		
-		else:
-			
-			filelocation = "%s/%s/%s/genelist_%s_co%s_chr%s.txt"%(
-																fa.mr_folder, 
-																fa.gfolder, 
-																subfolder, dataset, 
-																cutoff, chrom
-																)
-																
-		#These files contain the genelists from the eQTLs of every trait
-		with open(filelocation, 'r') as fo:
-			for line in fo:
-				
-				if line.startswith('trait'):
-					trait = line[7:16]
-					
-				if line.startswith('AT'):
-					genelist = line.split()
-
-					if trait and genelist:
-						data.append([trait, genelist])
-				
-	return data
-
-
-
-def read_seeds(fn):
-	seed_data = read_data(fn)
-	return seed_data
-
-	
-	
 
 def select_random_sample(genelist, sample_size, seedling):
 	"""
@@ -169,51 +87,27 @@ def count_total_relations(trait, TF_in_genelist, TG_list_ref, TF_list_ref):
 	return total_relations
 
 
-def sum_of_TGTF_rel(trait_samplelist, tt_genes, reference):
+
+def get_randomized_predictions(trait_randomsample, TF_set_ref):
 	"""
 	"""
-	TGTF_rel_major = []
-	
-	for tr_ge in trait_samplelist:
-		trait, samplelist = tr_ge
-		g_tempset = set(samplelist)
+	TGTF_list = []
+	for info in trait_randomsample:
+		TG = info[0]
+		genelist = info[1]
+		geneset = set(genelist)
 		
-		TF_inlist = g_tempset & reference	
-	
-		TGTF_rel_minor = identify_prediction(trait, samplelist, tt_genes, reference)
-		TGTF_rel_major.extend(TGTF_rel_minor)
-	
-	return TGTF_rel_major
-
-
-def identify_prediction(trait, genelist, true_target_genes, reference):
-	"""
-	Take a trait and a genelist
-	And compare it to a reference regulatory network (AtRegNet)
-	"""
-	TG_TF_predictions = []
-	
-	e_tempset = set(genelist)
-	#TFs that are found in the genelist
-	TF_in_genelist = e_tempset & reference	
-	#only copy the TG-TF relations for the traits that
-	#were identified as having a TF in the genelist
-	if TF_in_genelist and trait in true_target_genes:
-		
-		for e_id_TF in TF_in_genelist:
-			
-			#These are the verified TG-TF connections
-			TG_TF_predictions.append([trait, e_id_TF])
-
-
-	return TG_TF_predictions
+		TF_in_sample = geneset & TF_set_ref
+		if TF_in_sample:
+			for TF in TF_in_sample:
+				TGTF_list.append([TG, TF])
+	return TGTF_list
 
 
 
 def read_predicted_confusion_data(fn):
 	"""
 	"""
-	data_dict = OrderedDict()
 	
 	conf_data = read_data(fn)
 	
@@ -222,18 +116,79 @@ def read_predicted_confusion_data(fn):
 			dataset = line[9:].strip()
 		if line.startswith("cutoff:"):
 			cutoff = float(line[8:].strip())
-		if line.startswith("recall:"):
-			recall = float(line[8:].strip())
-		if line.startswith("precision:"):
-			precision = float(line[11:].strip())
 			
-			if dataset and cutoff and recall and precision:
-				data_dict[(dataset, cutoff)] = [recall, precision]
-			
-	return data_dict
+		if line.startswith("recall"):
+			recall = line[7:].strip()
+			if recall != "None":
+				recall = float(recall)
+			else:
+				recall = None
+				
+		if line.startswith("precis"):
+			precision = line[7:].strip()
+			if precision != "None":
+				precision = float(precision)
+			else:
+				precision = None
+		
+		if line.startswith("F1"):
+			F1 = line[3:].strip()
+			if F1 != "None":
+				F1 = float(F1)
+			else:
+				F1 = None
+				
+			if F1:
+				return recall, precision, F1
 	
 	
+def get_genelist(fn):
+	"""
+	"""
+	trait_genelist = []
+	data = read_data(fn)
+	for line in data:
+		if line.startswith("trait:"):
+			trait = line[7:].strip()
+		if line.startswith("AT"):
+			genelist = line.split()
 			
+			trait_genelist.append([trait, genelist])
+			
+	return trait_genelist
+
+
+def get_enriched(fn):
+	"""
+	"""
+	datalist_eqtl = []
+	datadict = {}
+	data = read_data(fn)
+	for line in data:
+		if line.startswith("trait:"):
+			trait = line[7:].strip()
+		if line.startswith("eqtl:"):
+			eqtl = int(line[6:].strip())
+		if line.startswith("AT"):
+			genelist = line.split()
+			
+			datalist_eqtl.append([trait, eqtl])
+			datadict[trait] = genelist			
+			
+	return datalist_eqtl, datadict
+
+
+def get_truetraits(fn):
+	"""
+	"""
+	truetrait_list = []
+	data = read_data(fn)
+	for line in data:	
+		if line.startswith("AT"):
+			trait = line.strip()
+			truetrait_list.append(trait)
+			
+	return truetrait_list
 
 
 def main():
@@ -256,201 +211,300 @@ def main():
 	sh_TF_list_ref = list(TF_set_ref)
 
 	#-----------------------------------------------------------
-	exp_list = ['Snoek_2012']#'Ligterink_2014','Ligterink_2014_gxe','Keurentjes_2007',
-	cutoff_list = [6.7]#, 4.3, 6.7]
+	exp_list = ['Snoek_2012']
+	#exp_list = ['Ligterink_2014','Ligterink_2014_gxe','Snoek_2012','Keurentjes_2007']
+	cutoff_list = [3]#[4.3,6.7]
 	chromo = [1,2,3,4,5]
 	#-----------------------------------------------------------
 	
-	#compare every recall and precision that are calculated during the
-	#random resampling to the ones in standard_data_dict per (dataset, cutoff)
-	standardfileloc = "%s/%s/predicted_confusion_variables.txt"%(fa.mr_folder, fa.numfolder)
-	standard_ref_data_dict = read_predicted_confusion_data(standardfileloc)
+	eQTL_threshold_list = [0,1,2,3]
 	
-	
-	fileloc = "%s/%s/tt_te_combi.txt"%(fa.mr_folder, fa.numfolder)
-	szdata = read_data(fileloc)
-	sample_size_dict = get_trait_samplesize_data(szdata)
-	
+	#-----------------------------------------------------------
 	
 	#get the premade 1000 distinct seeds of 8 digits each
 	seedfile = "%s/%s/random_seeds.txt"%(fa.mr_folder, fa.numfolder)
+	#print "Retrieving randomized seeds from %s"%seedfile
 	seeds = read_seeds(seedfile)
-	
-	resultsfolder = "%s/%s/permutate_result_test_F1.txt"%(fa.mr_folder, fa.numfolder)
 	
 	data_dict = {}
 	
+	write_summary = False
+	write_conf = False
+	print_conf = True
+	
 
+	summary = []
+	
 	for dataset in exp_list:
 		
 		for cutoff in cutoff_list:
 			
-			key = (dataset, cutoff)	
-			
-			#trait_genelist_list = [trait, genelist]
-			trait_genelist_list = get_genelist(dataset, cutoff, chromo)
-			
-			#total_rel is summed over all traits in a (dataset, cutoff) combination
-			total_rel = sum_of_total_rel(
-									trait_genelist_list, 
-									sh_TG_list_ref, 
-									sh_TF_list_ref
-									)
-			
-			if key in standard_ref_data_dict:
-				ref_recall, ref_precision = standard_ref_data_dict[key]
-				ref_F1 = 2 * (ref_precision * ref_recall) / (ref_precision + ref_recall)
-				print "ref_F1: %s"%ref_F1
+			for eQTL_threshold in eQTL_threshold_list:
 				
-			#higher_recall = 0
-			#lower_recall = 0
-			#higher_precision = 0
-			#lower_precision = 0
-			
-			higher_F1 = 0
-			lower_F1 = 0
-
-
-			if key in sample_size_dict:
-				#sample_size_list = [trait, sample_size]
-				sample_size_list = sample_size_dict[key]
-				tt_genes = [item[0] for item in sample_size_list]
+				print "Initializing analysis for dataset %s with cutoff %s"%(dataset, cutoff)
 				
-				#Go through the trait_genelist_list
-				#Check for every passing trait if it is in trait_list
-				#if so:
-				#activate the randomizor!
-				#by giving it the genelist, samplesize and a seed
-			
-			
-			
-			#permutate!
-			for seedling in seeds:
+				F1 = None
+				ref_F1 = None
+							
+				############################################################		
+				####Retrieve original confusion matrix results
+				subfolder_F1 = "/eqtl_%s/valnum_%s"%(eQTL_threshold, dataset)
+				F1_fn = "%s/%s/%s/valnum_results_%s_co%s"%(
+												fa.mr_folder, fa.numfolder,
+												subfolder_F1, dataset, cutoff
+												)
+				try:
+					ref_recall, ref_precision, ref_F1 = read_predicted_confusion_data(F1_fn)
+				except:
+					ref_recall= ref_precision= ref_F1 = None
 				
-				trait_randomsample = []
-
-				#create [trait - sample gene list]
-				for tr_ge in trait_genelist_list:
-					g_trait, g_genelist = tr_ge
-					
-					if g_trait in tt_genes:
-						trait_index = tt_genes.index(g_trait)
-						s_trait, s_size = sample_size_list[trait_index]
-						
-						rsamp = select_random_sample(g_genelist, s_size, seedling)
-						trait_randomsample.append([s_trait, rsamp])
-
-
-
-				#TG_TF_pred is summed over all traits in a (dataset, cutoff) combination
-				TG_TF_pred = sum_of_TGTF_rel(trait_randomsample, tt_genes, TF_set_ref)
-
-	
-				#proceed with the random sample to the confusion matrix
-				###########################################################										
-				true_pred_rel, false_pred_rel = identify_true_false_positives(
-																	TG_TF_pred,
-																	TG_TF_ref
-																	)
-				
-				###########################################################
-				unpredicted_rel = count_false_negatives(
-														TG_TF_ref, true_pred_rel, 
-														tt_genes
-														)
-														
-				###########################################################
-				TP, FP, FN, TN, recall, specif, precision = calculate_confusion(
-											total_rel, true_pred_rel, 
-											false_pred_rel, unpredicted_rel
-											)
-				
-
-				###########################################################
-				#print "true_traits: %s"%len(set(tt_genes))
-				#print_results(dataset, cutoff, TP, FP, FN, TN, recall, specif, precision)
-				###########################################################
-				
-				if precision + recall != 0:
-					F1 = 2 * (precision * recall) / (precision + recall)
-					print F1
-				else:
-					F1 = 0
-					print "Division by zero prevented for %s co %s"%(dataset, cutoff)
-				
-				if F1 <= ref_F1:
-					lower_F1 += 1
-				if F1 > ref_F1:
-					higher_F1 += 1
-
-				
-				#if recall < ref_recall:
-					#lower_recall += 1
-				#if recall > ref_recall:
-					#higher_recall += 1
-				#if precision < ref_precision:
-					#lower_precision += 1
-				#if precision > ref_precision:
-					#higher_precision += 1
-					
-				###########################################################
-			#toc = time.clock()
-			#stopwatch = toc-tic
-				
-			with open(resultsfolder, 'a') as fo:
-				
-				fo.write("-------------------------")
-				fo.write("\n")
-				#fo.write("time: %s"%stopwatch)
-				#fo.write("\n")
-				fo.write("dataset: %s"%dataset)
-				fo.write("\n")
-				fo.write("cutoff: %s"%cutoff)
-				fo.write("\n")
-				fo.write("-------------------------")
-				fo.write("\n")
-				fo.write("lower_F1: \t%s"%lower_F1)
-				fo.write("\n")
-				fo.write("higher_F1: \t%s"%higher_F1)
-				fo.write("\n")
-				#fo.write("recall:")
-				#fo.write("\n")
-				#fo.write("lower: %s"%lower_recall)
-				#fo.write("\n")
-				#fo.write("higher: %s"%higher_recall)
-				#fo.write("\n")
-				#fo.write("precision:")
-				#fo.write("\n")
-				#fo.write("lower: %s"%lower_precision)
-				#fo.write("\n")
-				#fo.write("higher: %s"%higher_precision)
-				#fo.write("\n")
-				fo.write("-------------------------")
-				fo.write("\n")
-				fo.write("\n")
-				
-				
-			#print "-------------------------"
-			#print "time: %s"%stopwatch
-			#print "dataset: %s"%dataset
-			#print "cutoff: %s"%cutoff
-			#print "-------------------------"
-			#print "recall:"
-			#print "lower: %s"%lower_recall
-			#print "higher: %s"%higher_recall
-			#print "precision:"
-			#print "lower: %s"%lower_precision
-			#print "higher: %s"%higher_precision
-			#print "-------------------------"
-			print "-------------------------"
-			print "dataset: %s"%dataset
-			print "cutoff: %s"%cutoff
-			print "-------------------------"
-			print "lower_F1:\t%s"%lower_F1
-			print "higher_F1:\t%s"%higher_F1	
-			print "-------------------------"
-					
+				if ref_F1 != None:
 		
+					############################################################
+					####Retrieve genelist
+					subfolder_genelist = "genelist_%s"%dataset
+					genelist_fn = "%s/%s/%s/genelist_%s_co%s.txt"%(
+													fa.mr_folder, fa.gfolder,
+													subfolder_genelist, dataset,
+													cutoff
+													)
+					trait_genelist_list = get_genelist(genelist_fn)
+					true_rel, total_rel = get_TGTF_from_genelist(
+															genelist_fn, TG_TF_ref, 
+															TG_list_ref, TF_list_ref
+															)
+					tt_genes = list(set([info[0] for info in true_rel]))
+					############################################################			
+					####Retrieve enriched list
+					subfolder_enriched = "enriched_%s"%dataset
+					enriched_fn = "%s/%s/%s/enriched_%s_co%s.txt"%(
+													fa.mr_folder, fa.enriched_folder,
+													subfolder_enriched, dataset,
+													cutoff
+													)
+					trait_eqtl_genelist, dict_trait_enriched = get_enriched(enriched_fn)
+					
+					############################################################
+					####Retrieve True Traits
+					emr_traits_fn = "%s/%s/emr_traitlist_%s_co%s.txt"%(
+													fa.mr_folder, fa.trait_folder,
+													dataset, cutoff
+													)
+
+		
+					############################################################
+					#get all traits that have more than X eQTLs, where X = eQTL_threshold			
+					truetrait_eqtl_list = [[t[0], t[1]] for t in trait_eqtl_genelist if t[0] in tt_genes and t[1]>eQTL_threshold]
+					trait_with_eqtl = [info[0] for info in truetrait_eqtl_list]
+					print "traits with eQTL", len(trait_with_eqtl)
+					############################################################
+					
+					higher_recall=lower_recall=higher_precision=lower_precision=0
+					higher_F1=lower_F1=0		
+					
+					permutated_confusion = []
+					#permutate!
+					#print "Commencing permutation of %s, standby..."%len(seeds)
+					#i = 0
+					for seedling in seeds:
+						#reset variables
+						TP=FP=FN=TN=recall=specif=precision=F1= 0
+						#print i
+						#i += 1
+						
+						trait_randomsample = []
+		
+						#create [trait - sample gene list]
+						for tr_ge in trait_genelist_list:
+							g_trait, g_genelist = tr_ge
+							#print g_trait
+							#print len(g_genelist)
+							
+							if g_trait in trait_with_eqtl and g_trait in dict_trait_enriched:
+								
+								sample_size = len(dict_trait_enriched[g_trait])
+								rsamp = select_random_sample(g_genelist, sample_size, seedling)
+								trait_randomsample.append([g_trait,0, rsamp])
+								#q = len(g_genelist)
+								#print "take %s from %s"%(sample_size, q)
+
+
+						#TG_TF_pred is summed over all traits in a (dataset, cutoff) combination
+						#TG_TF_pred = get_randomized_predictions(trait_randomsample, TF_set_ref)
+						TG_TF_pred = process_enrichment(trait_randomsample, TF_set_ref)
+		
+						
+						#proceed with the random sample to the confusion matrix
+						###########################################################										
+						true_pred_rel, false_pred_rel = identify_true_false_positives(
+																			TG_TF_pred,
+																			TG_TF_ref
+																			)
+						
+						###########################################################
+						unpredicted_rel = count_false_negatives(
+																TG_TF_ref, true_pred_rel, 
+																tt_genes
+																)
+																
+						###########################################################
+						TP, FP, FN, TN, recall, specif, precision, F1 = calculate_confusion(
+													total_rel, true_pred_rel, 
+													false_pred_rel, unpredicted_rel
+													)
+						
+						permutated_confusion.append([TP, FP, FN, TN, recall, specif, precision, F1])
+						###########################################################
+						#print "true_traits: %s"%len(set(tt_genes))
+						#print_results(dataset, cutoff, TP, FP, FN, TN, recall, specif, precision)
+						###########################################################
+						
+		
+						if recall != None:
+							if recall < ref_recall:
+								lower_recall += 1
+							if recall >= ref_recall:
+								higher_recall += 1
+						#else:
+							#print "recall is None"
+							#pass
+							
+						if precision != None:
+							if precision < ref_precision:
+								lower_precision += 1
+							if precision >= ref_precision:
+								higher_precision += 1
+						#else:
+							#print "precision is None"
+							#pass
+							
+						if ref_F1 != None and F1 != None:
+								if F1 < ref_F1:
+									lower_F1 += 1
+								if F1 >= ref_F1:
+									higher_F1 += 1
+		
+					summary.append([dataset, cutoff, lower_recall, higher_recall, lower_precision, higher_precision, lower_F1, higher_F1])
+						###########################################################
+					
+					
+				if write_conf:
+					substorage = "%s/%s/%s"%(fa.mr_folder, fa.numfolder, dataset)
+					if not os.path.exists(substorage):
+						os.mkdir(substorage)
+						
+					resultsfolder_conf = "%s/permutate_eqtl_%s_%s_co%s.txt"%(
+														 substorage, eQTL_threshold, 
+														 dataset, cutoff
+														)
+
+					try:	
+						print "Writing to file %s"%resultsfolder_conf
+						with open(resultsfolder_conf, 'w') as fo:
+							fo.write("-------------------------")
+							fo.write("\n")
+							fo.write("dataset: %s"%dataset)
+							fo.write("\n")
+							fo.write("cutoff: %s"%cutoff)
+							fo.write("\n")
+							fo.write("-------------------------")
+							fo.write("\n")
+							fo.write("lower_F1: \t%s"%lower_F1)
+							fo.write("\n")
+							fo.write("higher_F1: \t%s"%higher_F1)
+							fo.write("\n")
+							fo.write("-------------------------")
+							fo.write("\n")
+							fo.write("lower_recall: %s"%lower_recall)
+							fo.write("\n")
+							fo.write("higher_recall: %s"%higher_recall)
+							fo.write("\n")
+							fo.write("lower_precision: %s"%lower_precision)
+							fo.write("\n")
+							fo.write("higher_precision: %s"%higher_precision)
+							fo.write("\n")
+							fo.write("-------------------------")
+							fo.write("\n")
+							for [TP, FP, FN, TN, recall, specif, precision, F1] in permutated_confusion:
+								fo.write("-------------------------\n")
+								fo.write("TP\t%s\tFN\t%s"%(TP, FN))
+								fo.write("\n")
+								fo.write("FP\t%s\tTN\t%s"%(FP, TN))
+								fo.write("\n")
+								fo.write("-------------------------\n")
+								fo.write("recall\t%s"%recall)
+								fo.write("\n")
+								fo.write("specificity\t%s"%specif)
+								fo.write("\n")
+								fo.write("precision\t%s"%precision)
+								fo.write("\n")
+								fo.write("F1\t%s"%F1)
+								fo.write("\n")
+								fo.write("-------------------------\n")
+					except:
+						pass
+											
+				if print_conf:
+					try:
+						print "-------------------------"
+						print "TP\t%s\tFN\t%s"%(TP, FN)
+						print "FP\t%s\tTN\t%s"%(FP, TN)
+						print "-------------------------"
+						print "dataset: %s"%dataset
+						print "cutoff: %s"%cutoff
+						print "eQTL: %s"%eQTL_threshold
+						print "-------------------------"
+						print "lower_F1:\t%s"%lower_F1
+						print "higher_F1:\t%s"%higher_F1	
+						print "-------------------------"
+						print "lower_recall: %s"%lower_recall
+						print "higher_recall: %s"%higher_recall
+						print "lower_precision: %s"%lower_precision
+						print "higher_precision: %s"%higher_precision
+						print "-------------------------"
+					except:
+						pass
+
+
+						
+			if write_summary:
+				summfolder_conf = "%s/%s/permutate_summary_eqtl_%s.txt"%(
+												fa.mr_folder, fa.numfolder,
+												eQTL_threshold
+												)
+				try:
+					with open(summfolder_conf, 'w') as fo:
+						for dataset, cutoff, lower_recall, higher_recall, lower_precision, higher_precision, lower_F1, higher_F1 in summary:
+							fo.write("-------------------------")
+							fo.write("\n")
+							fo.write("dataset: %s"%dataset)
+							fo.write("\n")
+							fo.write("cutoff: %s"%cutoff)
+							fo.write("\n")
+							fo.write("-------------------------")
+							fo.write("\n")
+							fo.write("lower_F1: \t%s"%lower_F1)
+							fo.write("\n")
+							fo.write("higher_F1: \t%s"%higher_F1)
+							fo.write("\n")
+							fo.write("-------------------------")
+							fo.write("\n")
+							fo.write("recall:")
+							fo.write("\n")
+							fo.write("lower: %s"%lower_recall)
+							fo.write("\n")
+							fo.write("higher: %s"%higher_recall)
+							fo.write("\n")
+							fo.write("precision:")
+							fo.write("\n")
+							fo.write("lower: %s"%lower_precision)
+							fo.write("\n")
+							fo.write("higher: %s"%higher_precision)
+							fo.write("\n")
+							fo.write("-------------------------")
+							fo.write("\n")
+				except:
+					pass
 
 
 

@@ -19,9 +19,24 @@ from django.db import connection
 
 from .models import Gene,Marker,LOD,Experiment,ExperimentMarker
 
-from genelist_from_eqtl import marker_logp_list, add_chromosome_and_position, retrieve_logp_above_cutoff, check_region, iterate_marker_tuple, highest_tuple, set_region_from_adjacent_markers, get_chromosome_max, check_regions_on_chromosome, combine_marker_region_data, find_genes_in_regions, normalize_object_data, read_distinct_genes
-from go_enrichment import read_once_csv, segregate_gene_list, annotate_from_csv, read_go_info_once_csv, unique_GO_list, lets_see_tables, flatten_array, count_all_goterms, populate_contingency_table, fish_for_python, extract_significant_result, correct_pvalues_for_multiple_testing, make_qtl_go_dict, post_process_A, post_process_B
-from prepare_for_display import GO_link_creator, gene_link_creator, get_trait_description, get_genes_with_go_from_qtl, link_the_linked_links
+from genelist_from_eqtl import (
+			marker_logp_list, add_chromosome_and_position, retrieve_logp_above_cutoff, 
+			check_region, iterate_marker_tuple, highest_tuple, set_region_from_adjacent_markers, 
+			get_chromosome_max, check_regions_on_chromosome, combine_marker_region_data, 
+			find_genes_in_regions, normalize_object_data, read_distinct_genes
+			)
+from go_enrichment import (
+			read_once_csv, segregate_gene_list, annotate_from_csv, 
+			read_go_info_once_csv, unique_GO_list, lets_see_tables, flatten_array, 
+			count_all_goterms, populate_contingency_table, fish_for_python, 
+			extract_significant_result_fish, extract_significant_result_mult, 
+			correct_pvalues_for_multiple_testing, make_qtl_go_dict, 
+			post_process_A, post_process_B
+			)
+from prepare_for_display import (
+			retrieve_chromosome_boundaries, GO_link_creator, gene_link_creator, 
+			get_trait_description, get_genes_with_go_from_qtl, link_the_linked_links
+			)
 from draw_DAG import OBOReader, GOTerm, GODag, after_colon, read_until
 
 
@@ -73,10 +88,18 @@ def SearchTraitView(request):
 		except:
 			#default value:
 			fisher_alpha_name = 0.05
+
+		try:
+			mult_alpha_name_u = request.GET.get("mult_alpha_name").strip()
+			mult_alpha_name = float(mult_alpha_name_u)
+			
+		except:
+			#default value:
+			mult_alpha_name = 0.05
 		
 		try:
 			postA_name_u = request.GET.get("postA_name").strip()
-			postA_name = float(postA_name_u)
+			postA_name = float(postA_name_u)/100
 			
 		except:
 			#default value:
@@ -84,14 +107,16 @@ def SearchTraitView(request):
 			
 		try:
 			postB_name_u = request.GET.get("postB_name").strip()
-			postB_name = float(postB_name_u)
+			postB_name = float(postB_name_u)/100
 			
 		except:
 			#default value:
 			postB_name = 0.01			
 		
 		
-		tic = time.clock() # starting point of genelist retrieval
+
+		
+		#tic = time.clock() # starting point of genelist retrieval
 	
 		trait_name_u = request.GET.get('trait_name').strip()
 		trait_name = trait_name_u.encode("utf-8")
@@ -102,12 +127,22 @@ def SearchTraitView(request):
 		experiment_name = request.GET.get('experiment_name').strip()
 		#experiment_name = trait_name_u.encode("utf-8")
 
-		trait_function = get_trait_description(trait_name)
+
+		######################Store these variables for display########################
+		display_variables = [fisher_alpha_name, mult_alpha_name, postA_name*100, postB_name*100]
+		###############################################################################
+
+
 		
 		#Create url for GraphView
 		#The variables for matplotlib will be supplied via the url
 		Graph_url_base = request.build_absolute_uri(reverse('display_graph'))
-		Graph_url_data = "?trait_name=%s&cutoff_name=%f&experiment_name=%s" %(trait_name, cutoff_name, experiment_name)
+		
+		if gxe_boolean:
+			Graph_url_data = "?trait_name=%s&cutoff_name=%f&experiment_name=%s&gxe=on" %(trait_name, cutoff_name, experiment_name)
+		else:
+			Graph_url_data = "?trait_name=%s&cutoff_name=%f&experiment_name=%s" %(trait_name, cutoff_name, experiment_name)
+		
 		Graph_url = Graph_url_base + Graph_url_data
 
 
@@ -152,8 +187,8 @@ def SearchTraitView(request):
 			#Inside the template the key's are used to display the
 			#corresponding values
 			
-			toc = time.clock()
-			print "Time to retrieve a gene list is %f seconds" % (toc-tic)
+			#toc = time.clock()
+			#print "Time to retrieve a gene list is %f seconds" % (toc-tic)
 			
 			
 			
@@ -173,14 +208,14 @@ def SearchTraitView(request):
 			absent_genes, present_genes = segregate_gene_list(data_dict, gene_list)
 
 
-			print "number of genes in gene_list = %d" %len(gene_list)
-			print "number of genes in data_dict = %d" %(len(data_dict) - len(gene_list))	
+			#print "number of genes in gene_list = %d" %len(gene_list)
+			#print "number of genes in data_dict = %d" %(len(data_dict) - len(gene_list))	
 			
 			gene_inside_qtl_dict, gene_outside_qtl_dict, tot_in_qtl, tot_out_qtl = annotate_from_csv(data_dict, present_genes)
-			print "missings = %d" % len(absent_genes)
+			#print "missings = %d" % len(absent_genes)
 			
-			print "number of genes in qtl = %d and %d" %(len(gene_inside_qtl_dict), len(present_genes))
-			print "number of genes out qtl = %d" %len(gene_outside_qtl_dict)
+			#print "number of genes in qtl = %d and %d" %(len(gene_inside_qtl_dict), len(present_genes))
+			#print "number of genes out qtl = %d" %len(gene_outside_qtl_dict)
 		
 			golist_unique = unique_GO_list(gene_inside_qtl_dict)
 			
@@ -210,10 +245,10 @@ def SearchTraitView(request):
 			c_go_out_qtl_dict = count_all_goterms(golist_out_flat)
 			
 			#Create contingency tables for the Fishers exact test						
-			tic = time.clock()
+			#tic = time.clock()
 			c_array, total_genes = populate_contingency_table(c_go_in_qtl_dict, c_go_out_qtl_dict, golist_unique, tot_in_qtl, tot_out_qtl)
-			toc = time.clock()
-			print "Time to make contingency table is %f seconds" % (toc-tic)			
+			#toc = time.clock()
+			#print "Time to make contingency table is %f seconds" % (toc-tic)			
 			
 				
 				
@@ -230,41 +265,43 @@ def SearchTraitView(request):
 			#only allow the results with p values below fisher_alpha to pass
 			#fisher_alpha default is 0.05 unless another value is given
 			#front end
-			significant_info = extract_significant_result(fisher_python, fisher_alpha_name)
+			significant_info_fish = extract_significant_result_fish(fisher_python, fisher_alpha_name)
 			
 			#perform a multiple test
-			enriched_golist = correct_pvalues_for_multiple_testing(significant_info)
+			enriched_golist_mult = correct_pvalues_for_multiple_testing(significant_info_fish)
+			
+			significant_info_mult = extract_significant_result_mult(enriched_golist_mult, mult_alpha_name)
 			
 			#Post processing
 			qtl_go_dict = make_qtl_go_dict(gene_inside_qtl_dict, gene_dict)
 					
 
 			#A
-			tic = time.clock()
-			approved_golistA = post_process_A(enriched_golist, qtl_go_dict, postA_name)
-			toc = time.clock()
-			print "Time to approve enrichment A is %f seconds" % (toc-tic)
+			#tic = time.clock()
+			approved_golistA = post_process_A(significant_info_mult, qtl_go_dict, postA_name)
+			#toc = time.clock()
+			#print "Time to approve enrichment A is %f seconds" % (toc-tic)
 			
 			
 			#gene_list_for_specific_go = get_gene_with_go_from_qtl(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict)
 			
 			
 			#B
-			tic = time.clock()
+			#tic = time.clock()
 			godict_full = post_process_B(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict, postB_name)
-			toc = time.clock()
-			print "Time to approve enrichment B is %f seconds" % (toc-tic)
-			print "length of godict = %d" %len(godict_full)
+			#toc = time.clock()
+			#print "Time to approve enrichment B is %f seconds" % (toc-tic)
+			#print "length of godict = %d" %len(godict_full)
 			
 			#implement function that compares go terms and arranges according to parent child
 			#relationships if possible
 			
-			go_term = "GO:0061024"
+			#go_term = "GO:0061024"
 			#Create url for DAGView
 			#The variables for graphviz will be supplied via the url
-			DAG_url_base = request.build_absolute_uri(reverse('display_godag'))
-			DAG_url_data = "?goterm_name=%s" %(go_term)
-			DAG_url = DAG_url_base + DAG_url_data
+			#DAG_url_base = request.build_absolute_uri(reverse('display_godag'))
+			#DAG_url_data = "?goterm_name=%s" %(go_term)
+			#DAG_url = DAG_url_base + DAG_url_data
 		
 		
 			#GO links:
@@ -287,10 +324,12 @@ def SearchTraitView(request):
 			stats_dict = {
 						"link_for_trait" : link_for_trait,
 						"Graph_url" : Graph_url,
-						"DAG_url" : DAG_url, 
+						#"DAG_url" : DAG_url, 
 						"cutoff_name" : cutoff_name,
+						"experiment_name" : experiment_name,
 						"qtl_gogenes_dict" : qtl_gogenes_dict,
 						"go_genes_qtl_dict" : go_genes_qtl_dict,
+						"display_variables" : display_variables,
 						}
 			
 			
@@ -394,6 +433,7 @@ def MultipleTraitView(request):
 		
 		stats_dict = {
 					"cutoff_name" : cutoff_name,
+					"experiment_name" : experiment_name,
 					"combined_stats" : combined_stats
 					}
 	
@@ -427,26 +467,62 @@ def Graphview(request):
 	
 		cutoff_name_D = request.GET.get('cutoff_name')
 		cutoff_name = float(cutoff_name_D)
-		gxe_boolean = False
 		
+		if 'gxe' in request.GET:
+			gxe_boolean = True
+		if 'gxe' not in request.GET:
+			gxe_boolean = False
+			
 		experiment_name = request.GET.get('experiment_name').strip()
 		
-		data = marker_logp_list(trait_name, gxe_boolean, experiment_name)
+		data1 = marker_logp_list(trait_name, gxe_boolean, experiment_name)
+		data2 = add_chromosome_and_position(data1)
 		
 		#labels = [str(i[1]) for i in data]
-		x = [int(i[0]) for i in data]
-		y = [float(i[2]) for i in data]
+		x = [int(i[0]) for i in data1]
+		y = [float(i[2]) for i in data1]
+		
+		x_max = len(x)
+		y_max = max(y)
+		y_min = min(y)
 		
 		fig = Figure(figsize = (15,5))
 		axis = fig.add_subplot(1,1,1)
-		axis.set_title("LOD scores for trait %s with cutoff %s" %(trait_name, cutoff_name))
+		axis.set_xlim([0,x_max])
+		axis.set_ylim([y_min-0.25,y_max+0.25])
+		axis.set_title("LOD scores for Markers on the genome for trait %s with cutoff %s" %(trait_name, cutoff_name))
 		axis.set_xlabel("Marker")
-		axis.set_ylabel("LOD")
-		axis.grid(True)
+		axis.set_ylabel("LOD score")
+		axis.grid(False)
+		
+		
+		#add horizontal red lines to indicate cutoffs
 		axis.axhline(0, color = 'k')
 		axis.axhline(cutoff_name, color = 'r')
 		axis.axhline(-cutoff_name, color = 'r')
-		axis.autoscale(enable = True)
+		
+		###############################################################
+		#add vertical yellow lines to indicate chromosome borders			
+		chromo_nrs = [info[3] for info in data2]
+		c_chromo_nrs = Counter(chromo_nrs)
+		
+		c_list = []
+		chrom_len_list = []
+		chrom_start_pos = 0
+		for k, v in c_chromo_nrs.iteritems():
+			c_list.append([k, v])
+		
+		sorted_c_list = sorted(c_list)
+		#Calculate starting positions
+		for chrom, tally in sorted_c_list:
+			chrom_start_pos += tally
+			chrom_len_list.append(chrom_start_pos)
+			
+		for chrom_len in chrom_len_list:
+			axis.axvline(x=chrom_len, linewidth=1, color='y', alpha=0.5)
+		###############################################################
+				
+		axis.autoscale(enable = False)
 		axis.plot(x, y)
 		
 		canvas = FigureCanvas(fig)
@@ -471,6 +547,8 @@ def Graphview(request):
 def DAGView(request):
 	"""
 	Construct a Directed Acyclic Graph around one GO term
+	
+	Doesnt work yet, lacks some canvas functionality
 	"""
 	
 	if request.GET.get('goterm_name'):

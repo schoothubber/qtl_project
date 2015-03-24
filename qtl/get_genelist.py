@@ -15,11 +15,7 @@ from qtl.genelist_from_eqtl import (
 	check_regions_on_chromosome, combine_marker_region_data, find_genes_in_regions, normalize_object_data, 
 	read_distinct_genes
 	)
-from qtl.go_enrichment import (
-	read_once_csv, segregate_gene_list, annotate_from_csv, read_go_info_once_csv, 
-	unique_GO_list, lets_see_tables, flatten_array, count_all_goterms, populate_contingency_table, 
-	fish_for_python, extract_significant_result, correct_pvalues_for_multiple_testing, make_qtl_go_dict, 
-	post_process_A, post_process_B)
+
 	
 
 
@@ -28,91 +24,17 @@ main_folder = "/home/wouter/xenv_dj1.6/QTL"
 script_folder = "validation_script"
 result_folder = "validation"
 mr_folder =  "%s/%s"%(main_folder, result_folder)
+enriched_folder = "enrichment_results"
+glist_folder = "gene_lists"
 #Raw data
 raw_folder = "raw_data"
 filename_atreg = "%s/%s/AtRegNet.txt"%(result_folder, raw_folder)
+trait_folder = "trait_lists"
 
 
 
-	
-def get_trait_name(trait):
-	"""
-	Retrieve the functional description of the requested trait from the database
-	"""
-	
-	try:
-		trait_descr = Gene.objects.get(locus_identifier = trait).primary_gene_symbol
-		
-	except Gene.DoesNotExist:
-		trait_descr = "NA"
-	
-	return trait_descr	
 
-
-def read_parse_atreg(fn):
-	"""
-	read the AtRegNet file into a dataobject
-	"""
-	with open(fn, 'r') as fo:
-		data = fo.readlines()
-
-	db = []
-	for line in data:
-		info = line.split('\t')
-		
-		nr = info[0].strip('"')
-		gene_name = info[1].strip('"')
-		TF = info[2].strip('"')
-		family = info[3].strip('"')
-		alt_name = info[4].strip('"')
-		locus_id = info[5].strip('"')
-		yesno = info[6].strip('"')
-		direct = info[7].strip('"')
-		confirmed = info[8].strip('"')
-		biology = info[9].strip('"')
-		activity = info[10].strip('"')
-		article = info[11].strip('"')
-		
-		if len(TF.strip()) > 9:
-			tf1 = TF[0:9]
-			tf2 = TF[10:20]
-			
-			TF_split = [tf1, tf2]
-			for tf_n in TF_split:
-				cell = [nr,gene_name,tf_n,family,alt_name,locus_id,yesno,direct,confirmed,biology,activity,article]
-				db.append(cell)
-		
-		else:		
-		
-			cell = [nr,gene_name,TF,family,alt_name,locus_id,yesno,direct,confirmed,biology,activity,article]
-			db.append(cell)
-		
-	
-	return db
-		
-
-def make_AtReg_dict(data):
-	"""
-	Make a dict with Tf as key and target as value
-	"""
-	
-	AtReg_dict = SortedDict()
-	for line in data:
-		TF = line[2].upper()
-		target = line[5].upper()
-		
-		if TF not in AtReg_dict:
-			AtReg_dict[TF] = [target]
-		else:
-			temp_target = AtReg_dict[TF]
-			temp_target.append(target)
-			AtReg_dict[TF] = temp_target
-		
-	return AtReg_dict
-		
-
-
-def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean):
+def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean, TFset):
 	"""
 	Check enriched genes for each trait for presence of regulator
 	
@@ -120,6 +42,7 @@ def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean):
 	For later use...
 	"""
 	
+	#print "collecting data for %s of %s with %s"%(trait, exp, cutoff)
 	##########################################
 	####Run functions towards enrichment######
 	##########################################
@@ -148,37 +71,100 @@ def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean):
 	del l6
 	del l7
 	
-	print "trait %s has %s eQTLs"%(trait, qtls)
+	#print "trait %s has %s eQTLs"%(trait, qtls)
 	
 	if qtls != 0:
-	
-		gene_list = read_distinct_genes(gene_dict)
 
-		return gene_list
+		gene_list = read_distinct_genes(gene_dict)
+		geneset = set(gene_list)
+		TF_in_eQTL = TFset & geneset
+		del TFset
+		del geneset
+		
+		if TF_in_eQTL:
+			del TF_in_eQTL
+			print "winner winner chicken dinner!"
+			return gene_list
+		else:
+			del gene_list
+			return []
+
+
+
 		
 
-	
-
-
-def write_genelist_to_file(fn, gene, glist):
+def create_genelist_to_file(fn, dataset, cutoff):
 	"""
-	
 	"""
-	print "writing file %s"%fn
+	print "creating file for %s"%fn
 	with open(fn, 'w') as fo:
+		fo.write("dataset: %s"%dataset)
+		fo.write("\n")
+		fo.write("cutoff: %s"%cutoff)
+		fo.write("\n\n")
+		
+
+def append_genelist_to_file(fn, gene, glist):
+	"""
+	
+	"""
+	print "writing data for %s"%gene
+	with open(fn, 'a') as fo:
 		fo.write("trait: %s "%gene)
 		fo.write("\n")
-		loc_name = get_trait_name(gene)
-		fo.write("trait name: %s "%loc_name)
-		fo.write("\n")
-
 		for g in glist:
-			fo.write("TF: %s "%g)
-			fo.write("\n")
-			g_name = get_trait_name(g)
-			fo.write("TF name: %s"%g_name)
-			fo.write("\n")
+			fo.write("%s "%g)
+		fo.write("\n\n")
+
+
+
+
+def get_reference_data():
+	"""
+	"""
+	TF_list = []
+	ref_file = '/home/wouter/xenv_dj1.6/QTL/validation/raw_data/AtRegNet.txt'
+	with open(ref_file, 'r') as fo:
+		data = fo.readlines()
+		
+	for line in data:
+		info = line.split('\t')
+		TF = info[2].strip('"')
+		
+		if len(TF.strip()) > 9:
+			#print len(TF.strip())
+			#print "unsplit: %s"%TF
+			tf1 = TF[0:9]
+			tf2 = TF[10:20]
+			
+			TF_list.append(tf1.upper())
+			TF_list.append(tf2.upper())
+		
+		else:
+			TF_list.append(TF.upper())
 	
+	TF_set_reduced = set(TF_list)
+	del data		
+	del TF_list
+	
+	return TF_set_reduced
+
+
+def get_traits(dataset, cutoff, chromosome):
+	"""
+	"""
+	traitfile = "%s/%s/reduced_traitlist_%s_gxe_co%s.txt"%(
+													mr_folder, 
+													trait_folder, 
+													dataset, cutoff
+													)
+	with open(traitfile, 'r') as fo:
+		data = fo.readlines()
+	
+	traitlist = [trait.strip() for trait in data]
+	print "%s traits to be processed for %s %s"%(len(traitlist), dataset, cutoff)
+	return traitlist
+
 	
 
 def main():
@@ -189,68 +175,82 @@ def main():
 	And enter this command to run this script	
 	execfile('qtl/get_genelist.py')		
 	"""
-
-		
+	TFset = get_reference_data()
 	#Datasets
-	exp_list = ['Ligterink_2014','Keurentjes_2007','Snoek_2012']
+	#exp_list = [,'Snoek_2012','Keurentjes_2007']
+	exp_list = ['Ligterink_2014']
 
 	#Variables
-	#trait = "AT3G66652"
-	dataset = exp_list[0]
-	#chromosome = [1,2,3,4,5]
-	cutoff = [3, 4.3, 6.7]
-	coff = [cutoff[0]]
-	gxe_bool = False	
-	gxe = "False"
-	
-	loccer = []
-	traitlist = ['AT1G62300', 'AT2G43010', 'AT3G27920', 'AT3G47640', 'AT4G36920']
+	chromosome = [1,2,3,4,5]
+	cutoff_list = [6.7, 4.3, 3]
+	gxe_bool = True
 
-	folder = "validation/gene_lists_AtRegNet/%s"%dataset
+	restart_necessary = False
 	
-	if not os.path.exists(folder):
-		os.mkdir(folder)
-
-	TF_db = read_parse_atreg(filename_atreg)
-	adict = make_AtReg_dict(TF_db)
-	
-	for co in coff:
+	for dataset in exp_list:
 		
-		for loc in adict:
-			gene_list = give_genelist_for_trait(loc, co, dataset, gxe_bool)
-			TF_list = adict[loc]
+		#make a new folder for the dataset
+		if not gxe_bool:
+			storage_folder = "%s/%s/genelist_%s"%(mr_folder, glist_folder, dataset)
+		else:
+			storage_folder = "%s/%s/genelist_%s_gxe"%(mr_folder, glist_folder, dataset)
+		if not os.path.exists(storage_folder):
+			os.mkdir(storage_folder)
+		
+		for cutoff in cutoff_list:
 			
-			if gene_list:
-				#Compare overlap between gene_list and TF_list
-				gene_set = set(gene_list)
-				TF_set = set(TF_list)
+			traitlist = get_traits(dataset, cutoff, chromosome)
+			##################################
+			if restart_necessary:
+				last_trait = "AT3G47450"
+				trait_index = traitlist.index(last_trait)
+				new_traitlist = traitlist[trait_index:]
+			##################################
+			print "--------------------------------------------------"
 				
-				overlap = gene_set & TF_set
-				
-				if overlap:
-					loccer.append(loc)
-					filename = "%s/genelist_%s_co%s_gxe%s_%s.txt"%(folder, dataset, co, gxe, loc)
-					write_genelist_to_file(filename,loc, list(overlap))
+			if not gxe_bool:
+				fname = "%s/genelist_%s_co%s.txt"%(storage_folder, dataset, cutoff)
+			else:
+				fname = "%s/genelist_%s_gxe_co%s.txt"%(storage_folder, dataset, cutoff)
+			#print fname
+			#prep file
+			if not os.path.exists(fname):
+				create_genelist_to_file(fname, dataset, cutoff)
+				print "Created %s"%fname
+				print "--------------------------------------------------"
+			else:
+				print "%s already exists"%fname
+				print "--------------------------------------------------"
+
+			
+			#get the gene list from the eQTL regions for trait:
+			if restart_necessary:
+				for trait in new_traitlist:
+					print trait
+					eQTL_gene_list = give_genelist_for_trait(trait, cutoff, dataset, gxe_bool, TFset)
 					
-
-	print loccer
-
-
+					if eQTL_gene_list:
+						append_genelist_to_file(fname, trait, eQTL_gene_list)
+						del eQTL_gene_list
+						
+					gc.collect()
+				del traitlist
+				del new_traitlist
+			else:
+				for trait in traitlist:
+					print trait
+					eQTL_gene_list = give_genelist_for_trait(trait, cutoff, dataset, gxe_bool, TFset)
+					
+					if eQTL_gene_list:
+						append_genelist_to_file(fname, trait, eQTL_gene_list)
+						del eQTL_gene_list			
+						
+					gc.collect()
+				del traitlist
+			
+	
+	
 main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

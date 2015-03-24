@@ -40,6 +40,10 @@ def count_false_negatives(total_FN, pred_TP, true_traits):
 	"""
 	The leftover False Negatives should be the total possible FN
 	minus the actual TP
+	The total possible FN are those TG-TF that:
+	-are in AtRegNet
+	-have a TG which is in the dataset with eQTL (true_trait)
+	
 	
 	Also only take those TG-TF references into account that contain a TG
 	that was identified as a true trait in get_TGTF_from_genelist()
@@ -53,6 +57,7 @@ def count_false_negatives(total_FN, pred_TP, true_traits):
 		#because then it is a purple dot
 		if red_dot[0] in true_traits and red_dot not in pred_TP:
 			permitted_FN.append(red_dot)
+			#print len(permitted_FN)
 			
 	return permitted_FN
 	
@@ -70,22 +75,30 @@ def calculate_confusion(total_rel, true_pred_rel, false_pred_rel, unpredicted_re
 	if TP + FN != 0:
 		recall = TP / (TP + FN)
 	else:
-		recall = 0
+		#pass
+		recall = None
 		
 	if TN + FP != 0:
 		specif = TN / (TN + FP)
 	else:
-		specif = 0
+		#pass
+		specif = None
 	
 	if TP + FP != 0:
 		precis = TP / (TP + FP)
 	else:
-		precis = 0
+		#pass
+		precis = None
+		
+	if recall != None and precis != None and precis+recall != 0:
+		bal_F1 = 2.0 * (precis * recall) / (precis + recall)
+	else:
+		bal_F1 = None
 		
 	
-	return TP, FP, FN, TN, recall, specif, precis
+	return TP, FP, FN, TN, recall, specif, precis, bal_F1
 	
-def print_results(dataset, cutoff, TP, FP, FN, TN, recall, specif, precis):
+def print_results(dataset, cutoff, TP, FP, FN, TN, recall, specif, precis, F1):
 	"""
 	"""
 	print "confusion matrix"
@@ -95,9 +108,22 @@ def print_results(dataset, cutoff, TP, FP, FN, TN, recall, specif, precis):
 	print "TP %s \t FN %s"%(TP, FN)
 	print "FP %s \t TN %s"%(FP, TN)
 	print "---------------------------------"
-	print "recall: %s"%round(recall, 3)
-	print "specificity: %s"%round(specif, 3)
-	print "precision: %s"%round(precis, 3)
+	if recall != None:
+		print "recall: %s"%round(recall, 7)
+	else:
+		print "recall: NA"
+	if specif != None:
+		print "specificity: %s"%round(specif, 7)
+	else:
+		print "specificity: NA"
+	if precis != None:
+		print "precision: %s"%round(precis, 7)
+	else:
+		print "precision: NA"
+	if F1 != None:
+		print "F1: %s"%round(F1, 7)
+	else:
+		print "F1: NA"
 	print "#################################"	
 
 

@@ -1,6 +1,7 @@
 import sys
 import os
 from sortedcontainers import SortedDict
+from collections import Counter
 
 from qtl.models import Gene
 
@@ -8,11 +9,43 @@ sys.path.append('/home/wouter/xenv_dj1.6/QTL')
 #sys.path.append('/mnt/geninf15/prog/www/django/QTL')
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'QTL.settings')
 
+
+
+
+
+def retrieve_chromosome_boundaries(marker_info):
+	"""
+	The list marker_info should have the chromosomal positions of all markers
+	on index position 3. 
+	
+	#(integer, marker, -logp, chromosome number, physical position)
+	
+	These can be used to calculate the chromosome borders
+	"""
+
+	chroms = [info[3] for info in marker_info]
+	count_chroms = Counter(chroms)
+	
+	ctf_list = []
+	chrom_length_list = []
+	chrom_start_pos = 0
+	for k, v in count_chrom.iteritems():
+		ctf_list.append([k, v])
+
+	sorted_ctf_list = sorted(ctf_list)
+	#Calculate starting positions
+	for chrom, tally in sorted_ctf_list:
+		chrom_start_pos += tally
+		chrom_length_list.append(chrom_start_pos)
+		
+	print "chhrr %s"%chrom_length_list
+		
+	return chrom_length_list
+
+
 ###############################################################################
 #########################Create url Links######################################
 ###############################################################################
-
-
 
 
 def GO_link_creator(GOterm, go_info_dict):

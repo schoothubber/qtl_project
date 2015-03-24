@@ -4,7 +4,6 @@ import csv
 from collections import Counter
 from sortedcontainers import SortedDict
 from scipy import stats
-import rpy2.robjects as ro
 from numpy import array, empty 
 
 #from qtl.models import Gene,Marker,LOD,Experiment,ExperimentMarker
@@ -400,7 +399,7 @@ def fish_for_python(data):
 	return fisher_output
 	
 	
-def extract_significant_result(fisher_input, alpha):
+def extract_significant_result_fish(datainput, alpha):
 	"""
 	Only allow the results with a pvalue equal or below alpha to be returned
 	Because those are to be considered significant results
@@ -411,8 +410,28 @@ def extract_significant_result(fisher_input, alpha):
 	#info = [i, go, fu_pvalue]
 	
 	
-	for info in fisher_input:
+	for info in datainput:
 		if info[2] <= alpha:
+			
+		
+			significant_output.append(info)
+			
+	
+	return significant_output
+	
+def extract_significant_result_mult(datainput, alpha):
+	"""
+	Only allow the results with a pvalue equal or below alpha to be returned
+	Because those are to be considered significant results
+	"""
+	
+	significant_output = []
+	
+	#info = [i, go, fu_pvalue]
+	
+	
+	for info in datainput:
+		if info[3] <= alpha:
 			
 		
 			significant_output.append(info)
@@ -464,90 +483,6 @@ def correct_pvalues_for_multiple_testing(data):
 
 
 
-
-#def multiple_test(data):
-	#"""
-	#We need R's help to perform some statistics..
-	#But hopefully not for too long ;)
-	
-	#input = [i, go, fu_p_value[0]]
-	
-	#The p.adjust method is done on the RPV's of the fisher test, 
-	#since this value is more relevant.
-	
-	#output = [i, go, fu_p_value[0], adjusted(fu_p_value[0]) ]
-	
-	#The multiple testing procedure with the Benjamini/Hochberg method is
-	#not yet viable in scipy, therefor it is done through imported R functions. 
-	
-	#"""
-	#adjusted_output = []
-	
-	##store all the p values derived from the "greater" alternative fisher test
-	##in a new list (comprehension)	
-	#fu_p_value_list = [info[2] for info in data]
-	
-	##transform the list into vector so that R also understands whats
-	##going on
-	#fu_p_value_vector = ro.FloatVector(fu_p_value_list)
-	
-	##perform the FDR method on the pvalue vector
-	#cor_data = ro.r["p.adjust"](fu_p_value_vector, method = "BH")
-	
-	#Rround = ro.r['round']
-	
-	##Iterate through the list of lists and add the q value to each list
-	#for i in range(0, len(data)):
-		
-		#Rdata = Rround(cor_data[i], digits = 7)
-		#individual_adjusted = [data[i][0], data[i][1], data[i][2] , Rdata[0]]
-		
-		#adjusted_output.append(individual_adjusted)
-		
-	#return adjusted_output
-
-
-#def correct_pvalues_for_multiple_testing(data, correction_type = "Benjamini-Hochberg"):                
-	#"""                                                                                                   
-	#consistent with R - print correct_pvalues_for_multiple_testing([0.0, 0.01, 0.029, 0.03, 0.031, 0.05, 0.069, 0.07, 0.071, 0.09, 0.1]) 
-	#"""
-	#pvalues = [info[2] for info in data]                                                            
-	#pvalues = array(pvalues) 
-	#n = float(pvalues.shape[0])                                                                           
-	#new_pvalues = empty(n)
-	#if correction_type == "Bonferroni":                                                                   
-		#new_pvalues = n * pvalues
-	#elif correction_type == "Bonferroni-Holm":                                                            
-		#values = [ (pvalue, i) for i, pvalue in enumerate(pvalues) ]                                      
-		#values.sort()
-		#for rank, vals in enumerate(values):                                                              
-			#pvalue, i = vals
-			#new_pvalues[i] = (n-rank) * pvalue                                                            
-	#elif correction_type == "Benjamini-Hochberg":                                                         
-		#values = [ (pvalue, i) for i, pvalue in enumerate(pvalues) ]                                      
-		#values.sort()
-		#values.reverse()                                                                                  
-		#new_values = []
-		#for i, vals in enumerate(values):                                                                 
-			#rank = n - i
-			#pvalue, index = vals                                                                          
-			#new_values.append((n/rank) * pvalue)                                                          
-		#for i in xrange(0, int(n)-1):  
-			#if new_values[i] < new_values[i+1]:                                                           
-				#new_values[i+1] = new_values[i]                                                           
-		#for i, vals in enumerate(values):
-			#pvalue, index = vals
-			#new_pvalues[index] = new_values[i] 
-			                                                                                                                 
-	#for i in range(0, len(data)):
-		
-		#Rdata = Rround(cor_data[i], digits = 7)
-		#individual_adjusted = [data[i][0], data[i][1], data[i][2] , Rdata[0]]
-		
-		#adjusted_output.append(individual_adjusted)
-		
-	#return adjusted_output
-	
 	
 ###############################################################################
 ############################Post Processing#####################################

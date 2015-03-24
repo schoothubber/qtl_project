@@ -3,6 +3,6 @@ from qtl.views import BaseView
 
 urlpatterns = patterns('',
 	url(r'^$', BaseView, name='home'),
-	url(r'^wouter/', include('qtl.urls')),
+	url(r'^eqtlagogo/', include('qtl.urls')),
 	)
 	

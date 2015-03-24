@@ -25,14 +25,30 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'QTL.settings')
 
 from qtl.models import Gene,Marker,LOD,Experiment,ExperimentMarker
 
-from qtl.genelist_from_eqtl import marker_logp_list, add_chromosome_and_position, retrieve_logp_above_cutoff, check_region, iterate_marker_tuple, highest_tuple, set_region_from_adjacent_markers, get_chromosome_max, check_regions_on_chromosome, combine_marker_region_data, find_genes_in_regions, normalize_object_data, read_distinct_genes
-from qtl.go_enrichment import read_once_csv, segregate_gene_list, annotate_from_csv, read_go_info_once_csv, unique_GO_list, lets_see_tables, flatten_array, count_all_goterms, populate_contingency_table, fish_for_python, extract_significant_result, correct_pvalues_for_multiple_testing, make_qtl_go_dict, post_process_A, post_process_B
+from qtl.genelist_from_eqtl import (
+							marker_logp_list, add_chromosome_and_position, 
+							retrieve_logp_above_cutoff, check_region, 
+							iterate_marker_tuple, highest_tuple, 
+							set_region_from_adjacent_markers, 
+							get_chromosome_max, check_regions_on_chromosome, 
+							combine_marker_region_data, find_genes_in_regions, 
+							normalize_object_data, read_distinct_genes
+							)
+from qtl.go_enrichment import (
+					read_once_csv, segregate_gene_list, annotate_from_csv, 
+					read_go_info_once_csv, unique_GO_list, lets_see_tables, 
+					flatten_array, count_all_goterms, populate_contingency_table, 
+					fish_for_python, extract_significant_result_fish,
+					extract_significant_result_mult,
+					correct_pvalues_for_multiple_testing, make_qtl_go_dict, 
+					post_process_A, post_process_B
+					)
 from qtl.prepare_for_display import get_genes_with_go_from_qtl
 
 
 
 
-def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean, fisher_alpha_name, postA_name, postB_name, data_dict):
+def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean, fisher_alpha_name, mult_alpha_name, postA_name, postB_name, data_dict):
 	"""
 	Check enriched genes for each trait for presence of regulator
 	
@@ -93,17 +109,21 @@ def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean, fisher_alpha_name, 
 		fisher_python = fish_for_python(c_array)
 		
 		#only allow the results with p values below fisher_alpha to pass
-		significant_info = extract_significant_result(fisher_python, fisher_alpha_name)
+		#fisher_alpha default is 0.05 unless another value is given
+		#front end
+		significant_info_fish = extract_significant_result_fish(fisher_python, fisher_alpha_name)
 		
 		#perform a multiple test
-		enriched_golist = correct_pvalues_for_multiple_testing(significant_info)
+		enriched_golist_mult = correct_pvalues_for_multiple_testing(significant_info_fish)
+		
+		significant_info_mult = extract_significant_result_mult(enriched_golist_mult, mult_alpha_name)
 		
 		#Post processing
 		qtl_go_dict = make_qtl_go_dict(gene_inside_qtl_dict, gene_dict)
 
 		
 		#A
-		approved_golistA = post_process_A(enriched_golist, qtl_go_dict, postA_name)
+		approved_golistA = post_process_A(enriched_golist_mult, qtl_go_dict, postA_name)
 		#B
 		godict_full = post_process_B(approved_golistA, gene_inside_qtl_dict, gene_outside_qtl_dict, postB_name)
 		#go_gene_dict_full:
@@ -125,8 +145,9 @@ def give_genelist_for_trait(trait, cutoff, exp, gxe_boolean, fisher_alpha_name, 
 		del c_array
 		del total_genes
 		del fisher_python
-		del significant_info
-		del enriched_golist
+		del significant_info_fish
+		del significant_info_mult
+		del enriched_golist_mult
 		del qtl_go_dict
 		del approved_golistA 
 
@@ -344,14 +365,14 @@ def enriched_results_for_all():
 
 
 	#Datasets
-	#exp_list = ['Keurentjes_2007']#,'Ligterink_2014','Snoek_2012']
-	exp_list = ['Snoek_2012']
+	exp_list = ['Ligterink_2014','Keurentjes_2007','Snoek_2012']
 
 	#Variables
 	chromosome = [1,2,3,4,5]
-	cutoff_list = [3, 4.3, 6.7]
+	cutoff_list = [6.7]#, 4.3, 3, 2]
 	gxe_boolean = False
 	fisher_alpha_name = 0.05
+	mult_alpha_name = 0.05
 	postA_name = 0.5
 	postB_name = 0.01
 	
@@ -368,8 +389,6 @@ def enriched_results_for_all():
 		if not os.path.exists(folder):
 			os.mkdir(folder)
 
-
-
 	##run Forest! run!
 	
 	for cutoff in cutoff_list:
@@ -378,15 +397,19 @@ def enriched_results_for_all():
 			
 			for chrom in chromosome:
 				
-				subfolder = "v3_%s_%s"%(dataset, cutoff)
+				subfolder = "v4_%s_%s"%(dataset, cutoff)
 				storage = "%s/%s"%(folder, subfolder)
 				
 				if not os.path.exists(storage):
 					os.mkdir(storage)
 				
-				filename = "%s/%s/results3_%s_co%s_chr%s.txt"%(folder, subfolder, dataset, cutoff, chrom)
-				prepare_file(filename, chrom, dataset, cutoff)
-				print "Created %s"%filename
+				filename = "%s/%s/results4_%s_co%s_chr%s.txt"%(folder, subfolder, dataset, cutoff, chrom)
+				
+				if not os.path.exists(filename):
+					prepare_file(filename, chrom, dataset, cutoff)
+					print "Created %s"%filename
+				else:
+					print "%s already exists"%filename
 			
 
 				
@@ -401,13 +424,16 @@ def enriched_results_for_all():
 				#Change the name in the for loop to n_traitlist
 				#The index will start from that point
 				
-				#index = traitlist.index('AT5G67580')
-				#n_traitlist = traitlist[index:]
+				index = traitlist.index('AT1G67480')
+				n_traitlist = traitlist[index:]
 				
-				for trait in traitlist:
+				for trait in n_traitlist:
 				##################################
 				
-					go_gene_dict, gene_dict, qtls, counted_goes_in, counted_goes_out, tot_in, tot_out = give_genelist_for_trait(trait, cutoff, dataset, gxe_boolean, fisher_alpha_name, postA_name, postB_name, anno_data)
+					go_gene_dict, gene_dict, qtls, counted_goes_in, counted_goes_out, tot_in, tot_out = give_genelist_for_trait(
+										trait, cutoff, dataset, gxe_boolean, fisher_alpha_name, 
+										mult_alpha_name, postA_name, postB_name, anno_data
+										)
 					
 					if qtls != 0:
 						print trait

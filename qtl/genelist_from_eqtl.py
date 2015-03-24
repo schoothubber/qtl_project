@@ -116,8 +116,7 @@ def add_chromosome_and_position(tuple_list): #[(int, marker, -logp)]
 
 def retrieve_logp_above_cutoff(tuple_list, cutoff):
 	'''
-	Take all the Markers and -logp values above a certain value,
-	(Usually a cutoff of 2.3 is seen as significant)
+	Take all the Markers and LOD scores above a certain value,
 	
 	The cutoff is given as input in the app
 	'''
@@ -254,19 +253,10 @@ def highest_tuple(region):
 		
 	else:
 		#If there are multiple tuples:
-		#Iterate through the marker tuples in the list and compare 
-		#the size of the -log p value of each marker tuple
-		for i in range(0, len(region)-1):
-			
-			#use the abs() function because the -logp values can be negative
-			if abs(region[i][2]) < abs(region[i+1][2]):
-				
-				max_tuple = region[i+1]
-				
-			else:
-				
-				max_tuple = region[i]
-				
+		logp = [i[2] for i in region]
+		max_logp = max(logp)
+		logp_index = logp.index(max_logp)
+		max_tuple = region[logp_index]
 				
 		return max_tuple
 

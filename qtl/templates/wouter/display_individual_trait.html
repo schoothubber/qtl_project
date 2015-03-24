@@ -26,22 +26,38 @@ it will contain a message, this message will be about not finding any Enrichment
 	<img src = {{ Graph_url }} />
 	
 {% else %}
-<!-- In the possible event there is Enrichment, and thus no bottle, we GO ahead (note the pun)
+<!-- In the possible event where there is Enrichment, and thus no bottle, we GO ahead (note the pun)
 with the display of the found enrichment -->
 
+	{% if display_variables %}
+		
+		The Fisher's exact test used an alpha value of {{ display_variables.0 }}<br>
+		The Benjamini-Hochberg multiple testing correction used an alpha value of {{ display_variables.1 }}<br>
+		Each gene function is present in more than {{ display_variables.2 }}% of the eQTL regions of a trait<br>
+		GO terms are not predicted for more than {{ display_variables.3 }}% of all genes in the genome<br>
+		<hr>
 
-
+	{% endif %}
 
 <!-- Firstly display the trait that was looked for plus the cutoff used.
 Finish with an amazing description of the gene function of said trait -->
-	{% if link_for_trait and cutoff_name %}
-
-		You searched for trait
+	{% if link_for_trait and cutoff_name and experiment_name %}
+	
+	<table style="width:100%" bgcolor="WhiteSmoke">	
+		<tr>
+			<th>Trait</th>
+			<th>LOD score cutoff</th>		
+			<th>Dataset</th>
+		</tr>
 		
-			<a id="top" href={{ link_for_trait.0 }} target="_blank">{{ link_for_trait.1 }}</a> 
-		
-		with a threshold of {{ cutoff_name }}<br><br>
-		
+		<tr>
+			<td><a id="top" href={{ link_for_trait.0 }} target="_blank">{{ link_for_trait.1 }}</a></td>
+			<td>{{ cutoff_name }}</td>		
+			<td>{{ experiment_name }}</td>
+		</tr>
+	</table>
+	<br>
+			 
 		<b>Trait description:</b>
 		<br>
 		{{ link_for_trait.2 }}
@@ -121,7 +137,7 @@ the genes were found.
 		
 	{% endfor %}
 	</table>
-
+		<hr>
 
 		<!--Display a DAG-->
 	{% if DAG_url %}

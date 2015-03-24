@@ -30,7 +30,7 @@ def trait_list_maker():
 	execfile('qtl/trait_list.py')
 	"""
 
-	exp_list = ['Ligterink_2014', 'Keurentjes_2007', 'Snoek_2012']
+	exp_list = ['Ligterink_2014', 'Ligterink_2014_gxe', 'Keurentjes_2007', 'Snoek_2012']
 	chromosome = [1,2,3,4,5]
 	chrom = chromosome[1]
 	

@@ -32,13 +32,14 @@ from confusion_matrix import (
 #Set all variables
 #----------------------------------------------------------------------
 #exp_list = ['Ligterink_2014']
+#exp_list = ['Ligterink_2014_gxe']
 #exp_list = ['Keurentjes_2007']
 exp_list = ['Snoek_2012']
 
 chromosome = [1,2,3,4,5]
-cutoff_list = [3]
+#cutoff_list = [3]
 #cutoff_list = [4.3]
-#cutoff_list = [6.7]
+cutoff_list = [6.7]
 
 dataset = exp_list[0]
 cutoff = cutoff_list[0]		
@@ -330,7 +331,7 @@ if option == 3.1:
 											)			
 
 	#TFloc_list contains predicted datapoints
-	TFloc_list = [[info[1],info[0]] for info in total_rel_major]
+	#TFloc_list = [[info[1],info[0]] for info in total_rel_major]
 	
 	regus_list = sorted(list(set([info[1] for info in total_rel_major])))
 	locus_list = sorted(list(set([info[0] for info in total_rel_major])))
@@ -340,11 +341,11 @@ if option == 3.1:
 	locus_dict, chr_len_list = get_loci_from_dataset(locus_list)
 	
 	#Prepare data for scatter plots
-	moddata_array, labels_mod = link_data_in_array(TFloc_list, locus_dict, regus_dict, {})
+	moddata_array, labels_mod = link_data_in_array(total_rel_major, locus_dict, regus_dict, {})
 	
 	#Draw some scatter plots
 	plot_title = "TG-TF in genelists of %s with cutoff %s"%(dataset, cutoff)
-	scatterfilelocation = "%s/%s/scatter_genelist_%s_co%s.png"%(
+	scatterfilelocation = "%s/%s/scatter2_genelist_%s_co%s.png"%(
 														fa.mr_folder, fa.scatplot_folder, 
 														dataset, cutoff
 														)

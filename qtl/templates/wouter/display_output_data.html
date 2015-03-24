@@ -68,7 +68,7 @@ it will contain a message, this message will be about not finding any Enrichment
 
 {% if l3 %}
 
-<p><b>These markers have a -log p value above {{ cutoff_name }}:</b></p>
+<p><b>These markers have a LOD score above {{ cutoff_name }}:</b></p>
 
 	<table style="width:100%" bgcolor="WhiteSmoke">
 
@@ -139,7 +139,7 @@ it will contain a message, this message will be about not finding any Enrichment
 
 {% if l5 %}
 
-<p><b>For each group of markers the following have the highest -log p value:</b></p>
+<p><b>For each group of markers the following have the highest LOD score:</b></p>
 
 	<table style="width:100%" bgcolor="WhiteSmoke">
 
@@ -203,22 +203,6 @@ it will contain a message, this message will be about not finding any Enrichment
 	</table>
     
 {% endif %}
-
-
-
-
-
-{% if cm_data %}
-
-	{% for cm in cm_data %}
-		
-		<li>{{ cm }}</li>
-		
-	{% endfor %}
-	
-{% endif %}
-
-
 {% endif %}
 {% endif %}
 {% endblock %}

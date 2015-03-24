@@ -27,6 +27,7 @@ filename_TF = "%s/%s"%(mr_folder, TF_folder)#%(dataset)
 
 #Scattered
 scatplot_folder = "scatter_plots"
+plots = "plots"
 
 #Pairwise columns for TF and target genes -> validated results in talble form
 pvfolder = "pairwise_validation"
@@ -35,6 +36,7 @@ gfolder = "gene_lists"
 
 numfolder = "validation_numerics"
 
+full_trait_info = "full_trait_info"
 
 
 

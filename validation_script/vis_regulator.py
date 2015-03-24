@@ -1,11 +1,9 @@
 import collections as col
-from collections import Counter
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
-import pylab
 import numpy as np
 
 
@@ -87,7 +85,7 @@ def create_reg_dict(reg_list):
 	#Calculate chromosomal regions of the TF list
 	#these will be incicated by yellow horizontal lines
 	chromlist = [gene[2] for gene in reg_list]
-	count_chrom = Counter(chromlist)
+	count_chrom = col.Counter(chromlist)
 	#place these  counted values in a sorted list
 	ctf_list = []
 	for k, v in count_chrom.iteritems():
@@ -125,8 +123,8 @@ def link_data_in_array(data, locus_dict, reg_dict, AtReg_dict):
 	'1' indicates a connection
 	"""
 	
-	xaxis = len(locus_dict)
-	yaxis = len(reg_dict)
+	xaxis = len(reg_dict)
+	yaxis = len(locus_dict)
 	size = (yaxis, xaxis)
 	
 	#Create a matrix of zeros
@@ -139,9 +137,8 @@ def link_data_in_array(data, locus_dict, reg_dict, AtReg_dict):
 	labels = []
 	#Populate array with meaningfull data:
 	for i in range(0, len(data)):
-		reg = data[i][0]
-		loc = data[i][1]
-		#print "%s - %s"%(reg, loc)
+		loc = data[i][0]
+		reg = data[i][1]
 		
 		#if there is an x and y value in the matrix for this paired
 		#TF-gene relationship:
@@ -169,7 +166,7 @@ def link_data_in_array(data, locus_dict, reg_dict, AtReg_dict):
 				
 				index_reg = reg_dict[reg]
 				index_loc = locus_dict[loc]
-				data_array[index_reg, index_loc] = 1				
+				data_array[index_loc, index_reg] = 1				
 			
 			#Creation of Labels for the scatterplot
 				loc_label_data = (index_loc, index_reg, reg, loc)
@@ -191,8 +188,8 @@ def draw_plot(darray, fn, title, chr_len_list, TF_chr_len_list, labels, lab_lev,
 	fig = Figure(figsize = (10,10), dpi = 100)
 	axis = fig.add_subplot(1,1,1)
 	axis.set_title(title)
-	axis.set_xlabel("Target Genes")
-	axis.set_ylabel("Transcription Factor")
+	axis.set_xlabel("Transcription Factor")
+	axis.set_ylabel("Target Genes")
 	axis.grid(False)
 	axis.autoscale(enable = True)	
 	
@@ -200,10 +197,10 @@ def draw_plot(darray, fn, title, chr_len_list, TF_chr_len_list, labels, lab_lev,
 	axis.set_ylim(0, len(darray))
 		
 	for chrom_len in chr_len_list:
-		axis.axvline(chrom_len, color = 'y', alpha = 0.5)
+		axis.axhline(chrom_len, color = 'y', alpha = 0.5)
 		
 	for TF_chrom_len in TF_chr_len_list:
-		axis.axhline(TF_chrom_len, color = 'y', alpha = 0.5)
+		axis.axvline(TF_chrom_len, color = 'y', alpha = 0.5)
 			
 	x, y = populate_the_axis(darray)
 	axis.scatter(x,y, s=0.5, color=col, alpha=0.5)

@@ -9,7 +9,7 @@ import folder_assignments as fa
 
 rand_list = []
 
-for i in range(0, 1000):
+for i in range(0, 2000):
 	rint = random.randint(11111111, 99999999)
 	
 	if rint not in rand_list:
@@ -18,7 +18,7 @@ for i in range(0, 1000):
 		print "oops"
 
 
-fileloc = "%s/%s/random_seeds.txt"%(fa.mr_folder, fa.numfolder)
+fileloc = "%s/%s/random_seeds2.txt"%(fa.mr_folder, fa.numfolder)
 if rand_list:
 	with open(fileloc, 'w') as fo:
 		for rand in rand_list:

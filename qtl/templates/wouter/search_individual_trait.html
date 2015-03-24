@@ -10,11 +10,12 @@
 		<h2>Mandatory input</h2>
 		Enter one trait : <input id="trait_id" name ="trait_name" type="text"/>
 		<br><br>
-		Enter one cutoff : <input id ="cutoff" name ="cutoff_name" type="float" size="10"/>
+		Enter one LOD score cutoff : <input id ="cutoff" name ="cutoff_name" type="float" size="10"/>
 		<br><br>
 		<center><input type="submit" id="search_submit" value="Search" /></center>
 		<br>
 		<hr>
+		<h2>Semi-mandatory input</h2>
 		<br>		
 		Choose a dataset : 
 		<select id = "experiment" name = "experiment_name">
@@ -26,27 +27,35 @@
 
 		
 		<br>
-		<hr>
 		
-		<h2>Optional input</h2>
+		
 		Uncheck for normal gene expression / 
-		Check for environmental permutation
+		Check for environmental perturbation
 		<input  id="set_gxe" name ="gxe" type="checkbox"/>
 		
 		<br><br>
+		<hr>
 		
-		For the fisher test use an alpha value of <input id ="fisher_alpha" name ="fisher_alpha_name" type="float" size="5"/>
+		<h2>Optional input</h2>
+
+		
+		For the Fisher exact test use an alpha value of <input id ="fisher_alpha" name ="fisher_alpha_name" type="float" size="5"/>
+		(default = 0.05)
+		
+		<br><br>
+
+		For the Benjamini-Hochberg multiple testing correction use an alpha value of <input id ="mult_alpha" name ="mult_alpha_name" type="float" size="5"/>
 		(default = 0.05)
 		
 		<br><br>
 		
-		A gene function must be present in more than <input id ="postA" name ="postA_name" type="float" size="5"/>
-		of the eQTL regions of a trait (default = 0.5)
+		Genes with a particular GO term must be present in more than <input id ="postA" name ="postA_name" type="float" size="5"/>
+		of the eQTL regions of a trait (default = 50%)
 		
 		<br><br>
 		
-		Gene functions must not be predicted for more than <input id ="postB" name ="postB_name" type="float" size="5"/>
-		 of all genes in the genome (default = 0.01)
+		GO terms must not be predicted for more than <input id ="postB" name ="postB_name" type="float" size="5"/>
+		 of all genes in the genome (default = 1%)
 		 
 		<br><br>
 		

@@ -1,5 +1,6 @@
 import collections as col
 import os
+import folder_assignments as fa
 
 def read_data(fn):
 	"""
@@ -220,7 +221,89 @@ def make_folder(fn):
 		os.mkdir(fn)
 	
 	
+def get_genelist(dataset, cutoff, chromosome):
+	"""
+	Extract data from several files
+	The files are arranged per dataset and cutoff
 	
+	The data consists of traits with a genelist from their eQTL regions
+	"""
+	
+	data = []
+	
+	subfolder = "genelist_%s/"%dataset
+			
+	#Per trait extract the eQTL genelist
+	for chrom in chromosome:
+	
+		if dataset == 'Ligterink_2014_gxe':
+			datset = 'Ligterink_2014'
+
+			filelocation = "%s/%s/genelist_%s/genelist_%s_co%s_chr%s.txt"%(
+																	fa.mr_folder, 
+																	fa.gfolder, datset, 
+																	dataset, cutoff, chrom
+																	)
+		
+		else:
+			
+			filelocation = "%s/%s/%s/genelist_%s_co%s_chr%s.txt"%(
+																fa.mr_folder, 
+																fa.gfolder, 
+																subfolder, dataset, 
+																cutoff, chrom
+																)
+																
+		#These files contain the genelists from the eQTLs of every trait
+		with open(filelocation, 'r') as fo:
+			for line in fo:
+				
+				if line.startswith('trait'):
+					trait = line[7:16]
+					
+				if line.startswith('AT'):
+					genelist = line.split()
+
+					if trait and genelist:
+						data.append([trait, genelist])
+				
+	return data
+
+
+
+def read_seeds(fn):
+	seed_data = read_data(fn)
+	return seed_data	
 	
 		
+def get_trait_samplesize_data(data):
+	"""
+	Data was written to:
+	Home/xenv_dj1.6/QTL/validation/validation_numerics/tt_te_combi.txt
+	
+	This is data is to be extracted and will be partitioned based on
+	dataset and cutoff
+	
+	"""
+
+	data_dict = col.OrderedDict()
+	
+	for line in data:
+		info = line.split()
+		dataset = info[0].strip()
+		cutoff = float(info[1].strip())
+		trait = info[2].strip()
+		sample_size = int(info[3].strip())
+		
+		if (dataset, cutoff) not in data_dict:
+			data_dict[(dataset, cutoff)] = [[trait, sample_size]]
+		else:
+			temp_data = data_dict[(dataset, cutoff)]
+			temp_data.append([trait, sample_size])
+			data_dict[(dataset, cutoff)] = temp_data
+			
+	return data_dict
+
+
+
 

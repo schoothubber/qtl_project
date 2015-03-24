@@ -18,9 +18,12 @@ th, td {
 </head>
 
 
-
-The following traits were scanned with cutoff {{ cutoff_name }}
-<br><br>
+{% if cutoff_name and experiment_name %}
+	The following traits were found with LODscore cutoff value {{ cutoff_name }}
+	<br>
+	Dataset: {{ experiment_name }}
+	<br><br>
+{% endif %}
 
 
 
