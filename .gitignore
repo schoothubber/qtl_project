@@ -1,4 +1,4 @@
-*.pyc
-*.out
-*.csv
-*.obo
+**/*.pyc
+**/*.out
+**/*.csv
+**/*.obo
